@@ -122,8 +122,24 @@ class PathPlanner:
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
         #Hint: The disk function is included to help you with this function
-        print("TO DO: Implement a method to get the pixel locations of the robot path")
-        return [], []
+
+        # For each point that robot is expected draw a circle
+        # Then then draw a circle with all pixel locations that robot covers
+        robot_locations_rr = list()
+        robot_locations_cc = list()
+
+        for p in points:
+            
+            pixel = self.point_to_cell(p)
+            rr, cc = disk(pixel[0], pixel[1], self.robot_radius)
+            robot_locations_rr.append(rr)
+            robot_locations_cc.append(cc)
+
+        # print("TO DO: Implement a method to get the pixel locations of the robot path")
+
+        return robot_locations_rr, robot_locations_cc
+        #return [], []
+
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
