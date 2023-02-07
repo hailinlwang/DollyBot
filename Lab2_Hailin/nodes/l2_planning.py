@@ -159,7 +159,20 @@ class PathPlanner:
     def cost_to_come(self, trajectory_o):
         #The cost to get to a node from lavalle 
         print("TO DO: Implement a cost to come metric")
-        return 0
+        # Use the an Euclidean distance metric - Should be admissable
+        # We are getting trajectory_o from trajectory rollout function
+        goal_coords = self.goal_point[0]
+        num_points = trajectory_o.shape[0]
+
+        h_cost = np.empty(num_points, 1)
+
+        # For each point in trajectory use Euclidean Distance as heuristic
+        for i, p in enumerate(trajectory_o):
+            # For each coordinate should only have 2
+            h_cost[i] = np.sqrt((p[0]-goal_coords[0])**2 + (p[1]-goal_coords[1])**2)
+
+        # Options: Could get the min cost amongst trajectory or last or all
+        return h_cost
     
     def update_children(self, node_id):
         #Given a node_id with a changed cost, update all connected nodes with the new cost
