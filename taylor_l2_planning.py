@@ -99,6 +99,7 @@ class PathPlanner:
         vel, rot_vel = self.robot_controller(node_i, point_s)
 
         robot_traj = self.trajectory_rollout(vel, rot_vel)
+        robot_traj += node_i
         return robot_traj
     
     def robot_controller(self, node_i, point_s):
@@ -127,6 +128,7 @@ class PathPlanner:
         ang_vel = p_ang * dtheta
 
         return lin_vel,ang_vel
+
     
     def trajectory_rollout(self, vel, rot_vel):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
@@ -135,10 +137,22 @@ class PathPlanner:
         return np.zeros((3, self.num_substeps))
     
     def point_to_cell(self, point):
-        #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
-        #point is a 2 by N matrix of points of interest
-        print("TO DO: Implement a method to get the map cell the robot is currently occupying")
-        return 0
+
+        # Get origin values (coordinates of left bottom corner in m)
+        x_origin, y_origin, theta_origin = self.map_settings_dict['origin']
+        resolution = self.map_settings_dict['resolution']
+
+        # Instantiate conversion array
+        points = np.zeros_like(point)
+
+        # Convert metric points to be measured from upper left corner
+        x = point[0, :] + abs(x_origin)
+        y = -1*point[1, :] + abs(y_origin)
+
+        points[0, :] = y / resolution
+        points[1, :] = x / resolution
+
+        return points
 
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
@@ -146,11 +160,19 @@ class PathPlanner:
 
         # For each point that robot is expected draw a circle
         # Then then draw a circle with all pixel locations that robot covers
+        robot_locations_rr = list()
+        robot_locations_cc = list()
 
-        # print("TO DO: Implement a method to get the pixel locations of the robot path")
+        for p in points:
+            
+            pixel = self.point_to_cell(p)
+            rr, cc = disk(pixel[0], pixel[1], self.robot_radius)
+            robot_locations_rr.append(rr)
+            robot_locations_cc.append(cc)
+
 
         return robot_locations_rr, robot_locations_cc
-        #return [], []
+
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
@@ -167,14 +189,19 @@ class PathPlanner:
         print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
         return np.zeros((3, self.num_substeps))
     
-    def cost_to_come(self, trajectory_o):
-        #The cost to get to a node from lavalle 
-        print("TO DO: Implement a cost to come metric")
-        return 0
+    def cost_to_come(trajectory):
+        cost = 0
+        for i in range(1,len(trajectory)):
+            cost += np.linalg.norm(trajectory[i,:2] - trajectory[i-1,:2])
+        return cost
     
     def update_children(self, node_id):
         #Given a node_id with a changed cost, update all connected nodes with the new cost
-        print("TO DO: Update the costs of connected nodes after rewiring.")
+        for child in node_id.children_ids:
+            traj = self.connect_node_to_point(node_id.point,child.point[:2])
+            cost = self.cost_to_come(traj)
+            child.cost = node_id.cost + cost
+            self.update_children(child)
         return
 
     #Planner Functions
