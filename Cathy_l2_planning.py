@@ -196,32 +196,8 @@ class PathPlanner:
         return min(self.gamma_RRT * (np.log(card_V) / card_V ) ** (1.0/2.0), self.epsilon)
     
     def connect_node_to_point(self, node_i, point_f):
-        #Given two nodes find the non-holonomic path that connects them
-        #Settings
-        #node is a 3 by 1 node
-        #point is a 2 by 1 point
-        print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
-        threshold = 0.10
-        tog = 0
-        path = np.copy(node_i)
-        cnt = 0
-        
-        while tog == 0 and cnt < 20:
-            new_pts = np.array([self.simulate_trajectory(node_i, point_f)]).T
-            # Collision check new_pt
-            circle_pixels = self.points_to_robot_circle(new_pts)
-            for pix in circle_pixels:
-                if self.occupancy_map[pix[0], pix[1]] < 10:
-                    return []
-                
-            # If not occupied add new pts to path
-            path = np.hstack(path, new_pts)
-
-            # If path is occupied 
-            if np.sum((new_pts[0:1, :] - point_f)) < threshold:
-                return path
-        print("ERROR: could not connect nodes")
-        return np.zeros((3, self.num_substeps))
+        new_traj = self.simulate_trajectory(node_i, point_f)
+        return new_traj
     
     
     def cost_to_come(self, trajectory_o):
