@@ -99,7 +99,16 @@ class PathPlanner:
         vel, rot_vel = self.robot_controller(node_i, point_s)
 
         robot_traj = self.trajectory_rollout(vel, rot_vel)
-        return robot_traj
+
+        # Multiply robot_traj by rotation matrix to go to world frame, then add to node_i
+        theta = node_i[2,0]
+        rotm = np.eye((3))
+        rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
+        rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
+
+        robot_traj_wf = node_i + rotm@robot_traj
+
+        return robot_traj_wf
     
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
