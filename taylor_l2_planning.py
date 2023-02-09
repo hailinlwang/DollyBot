@@ -95,11 +95,15 @@ class PathPlanner:
         #This function drives the robot from node_i towards point_s. This function does has many solutions!
         #node_i is a 3 by 1 vector [x;y;theta] this can be used to construct the SE(2) matrix T_{OI} in course notation
         #point_s is the sampled point vector [x; y]
-        print("TO DO: Implment a method to simulate a trajectory given a sampled point")
         vel, rot_vel = self.robot_controller(node_i, point_s)
 
-        robot_traj = self.trajectory_rollout(vel, rot_vel)
-        robot_traj += node_i
+        robot_traj_r = self.trajectory_rollout(vel, rot_vel)
+        theta = -node_i[2]
+        R = [[np.cos(theta), -np.sin(theta)],[np.sin(theta), np.cos(theta)]]
+
+        for pt in robot_traj_r:
+            robot_traj = R * pt + node_i
+
         return robot_traj
     
     def robot_controller(self, node_i, point_s):
