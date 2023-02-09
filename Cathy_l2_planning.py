@@ -152,29 +152,38 @@ class PathPlanner:
         print("TO DO: Implement a control scheme to drive you towards the sampled point")
         return 0, 0
     
-    def trajectory_rollout(self, vel, rot_vel):
-        # Given your chosen velocities determine the trajectory of the robot for your given timestep
-        # The returned trajectory should be a series of points to check for collisions
-        print("TO DO: Implement a way to rollout the controls chosen")
+def trajectory_rollout(vel, rot_vel):
+    # Given your chosen velocities determine the trajectory of the robot for your given timestep
+    # The returned trajectory should be a series of points to check for collisions
+    # print("TO DO: Implement a way to rollout the controls chosen")
+    num_substeps = 10
+    timestep = 1
+    # Initialize empty trajectory
+    traj = np.zeros((3, num_substeps))
+    vel_vec = np.zeros((3, 1))
+    vel_vec[0, 0] = vel
+    vel_vec[2, 0] = rot_vel
+    theta = 0
+    # vel_vec = np.array([[vel, 0, rot_vel]]).T
 
-        # Initialize empty trajectory
-        traj = np.zeros((3, self.num_substeps))
-        vel = np.array([[vel, 0, rot_vel]]).T
+    # Generate time stamps of sub steps
+    substep_size = timestep / num_substeps
+    rotm = np.eye((3))
 
-        # Generate time stamps of sub steps
-        substep_size = timestep / num_substeps
-        rotm = np.eye((3))
+    # Run through each substep
+    for i in range(1, num_substeps-1):
+        # Build rotation matrix
 
-        # Run through each substep
-        for i in range(1, self.num_substeps-1):
-            # Build rotation matrix
-            theta = traj[2, i]
-            rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
-            rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
-            
-            traj[:, i] = traj[:, i-1] + np.reshape(rotm@vel*substep_size, (3,))
+        rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
+        rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
+        
+        traj[:, i] = traj[:, i-1] + np.reshape(rotm@vel_vec*substep_size, (3,))
+        # print(vel_vec)
+        theta = traj[2, i]
+        vel_vec[0,0] = vel * np.cos(theta)
+        vel_vec[1,0] = vel * np.sin(theta)
 
-        return traj
+    return traj
     
     def point_to_cell(self, point):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
