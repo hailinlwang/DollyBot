@@ -74,21 +74,54 @@ class PathPlanner:
             "Path Planner", (1000, 1000), self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
         return
 
+    def check_if_duplicate(self, point):
+        
+        # Assuming that a node's ID is its index in the node list
+        for node in self.nodes:
+            if point[0] == node.point[0] and point[1] == node.point[1] :
+                return True
+
+        return False
+
     #Functions required for RRT
     def sample_map_space(self):
-        #Return an [x,y] coordinate to drive the robot towards
-        print("TO DO: Sample point to drive towards")
-        return np.zeros((2, 1))
+        # Return an [x,y] coordinate to drive the robot towards
+        # HINT: You may choose a subset of the map space to sample in
+
+        # Continue to take sample points until we find one that isn't duplicate
+        while True:
+
+            # Get bounding range for map
+            bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
+
+            # Generate random values for x and y
+            point = np.random.rand(2, 1)
+            point[1, 0] = (bounding_x[1]-bounding_x[0])*point[1, 0] + bounding_x[0]
+            point[0, 0] = (bounding_y[1]-bounding_y[0])*point[0, 0] + bounding_y[0]
+
+            if not self.check_if_duplicate(point):
+                break
+
+        return point
     
-    def check_if_duplicate(self, point):
-        #Check if point is a duplicate of an already existing node
-        print("TO DO: Check that nodes are not duplicates")
-        return False
     
     def closest_node(self, point):
-        #Returns the index of the closest node
-        print("TO DO: Implement a method to get the closest node to a sapled point")
-        return 0
+
+        closest_dist = 9999
+        closest_ind = 0
+
+        # Assuming that a node's ID is its index in the node list
+        for i, node in enumerate(self.nodes):
+
+            # Get distant from current point to node point
+            dist = np.sqrt((point[0, 0] - node.point[0])**2 + (point[1, 0] - node.point[1])**2)
+
+            # Update if necessary
+            if dist < closest_dist:
+                closest_dist = dist
+                closest_ind = i
+
+        return closest_ind 
     
     def simulate_trajectory(self, node_i, point_s):
         #Simulates the non-holonomic motion of the robot.
