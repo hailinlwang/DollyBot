@@ -96,19 +96,55 @@ class PathPlanner:
         #node_i is a 3 by 1 vector [x;y;theta] this can be used to construct the SE(2) matrix T_{OI} in course notation
         #point_s is the sampled point vector [x; y]
         print("TO DO: Implment a method to simulate a trajectory given a sampled point")
-        vel, rot_vel = self.robot_controller(node_i, point_s)
 
+        # Get trajectory for first timestep
+        vel, rot_vel = self.robot_controller(node_i, point_s)
         robot_traj = self.trajectory_rollout(vel, rot_vel)
 
         # Multiply robot_traj by rotation matrix to go to world frame, then add to node_i
-        theta = node_i[2,0]
+        theta = - node_i[2,0]
         rotm = np.eye((3))
         rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
         rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
 
-        robot_traj_wf = node_i + rotm@robot_traj
+        robot_traj = node_i + rotm@robot_traj
 
-        return robot_traj_wf
+        # Iteratively call robot_controller and trajectory_rollout until at point_s
+        threshold = 0.10
+        tog = 0
+        cnt = 0
+        
+        while (tog == 0) and (cnt < 50) :
+
+            # Get new trajectory in robot frame
+            new_vel, new_rot_vel = self.robot_controller(robot_traj[:, cnt], point_s)
+            new_pts = self.trajectory_rollout(new_vel, new_rot_vel)
+
+            # Transform new pts to world frame
+            theta = - robot_traj[2,cnt]
+            rotm = np.eye((3))
+            rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
+            rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
+            new_pts_wf = rotm@robot_traj + robot_traj[:, cnt]
+            robot_traj = np.hstack(robot_traj, new_pts_wf)
+
+            # Collision check new_pt
+            # circle_pixels = self.points_to_robot_circle(new_pts)
+            # col = self.check_collision(circle_pixels)
+            # if (col == 1):
+            #     return []
+            # for pix in circle_pixels:
+            #     if self.occupancy_map[pix[0], pix[1]] < 10:
+            #         return []
+                
+            # If not occupied add new pts to path
+            robot_traj = np.hstack(robot_traj, new_pts_wf)
+
+            # Check if new point is close enough to point_s
+            if np.linalg.norm(robot_traj[1:2, robot_traj.shape[1]]) < threshold:
+                tog = 1
+        
+        return robot_traj
     
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
