@@ -131,7 +131,7 @@ class PathPlanner:
         for p in points:
             
             pixel = self.point_to_cell(p)
-            rr, cc = disk(pixel[0], pixel[1], self.robot_radius)
+            rr, cc = disk((pixel[0], pixel[1]), self.robot_radius)
             robot_locations_rr.append(rr)
             robot_locations_cc.append(cc)
 
