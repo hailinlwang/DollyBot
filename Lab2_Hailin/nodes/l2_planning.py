@@ -96,28 +96,125 @@ class PathPlanner:
         #node_i is a 3 by 1 vector [x;y;theta] this can be used to construct the SE(2) matrix T_{OI} in course notation
         #point_s is the sampled point vector [x; y]
         print("TO DO: Implment a method to simulate a trajectory given a sampled point")
-        vel, rot_vel = self.robot_controller(node_i, point_s)
 
+        # Get trajectory for first timestep
+        vel, rot_vel = self.robot_controller(node_i, point_s)
         robot_traj = self.trajectory_rollout(vel, rot_vel)
+
+        # Multiply robot_traj by rotation matrix to go to world frame, then add to node_i
+        theta = - node_i[2,0]
+        rotm = np.eye((3))
+        rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
+        rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
+
+        robot_traj = node_i + rotm@robot_traj
+
+        # Iteratively call robot_controller and trajectory_rollout until at point_s
+        threshold = 0.10
+        tog = 0
+        cnt = 0
+        
+        while (tog == 0) and (cnt < 50) :
+
+            # Get new trajectory in robot frame
+            new_vel, new_rot_vel = self.robot_controller(robot_traj[:, cnt], point_s)
+            new_pts = self.trajectory_rollout(new_vel, new_rot_vel)
+
+            # Transform new pts to world frame
+            theta = - robot_traj[2,cnt]
+            rotm = np.eye((3))
+            rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
+            rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
+            new_pts_wf = rotm@robot_traj + robot_traj[:, cnt]
+            robot_traj = np.hstack(robot_traj, new_pts_wf)
+
+            # Collision check new_pt
+            # circle_pixels = self.points_to_robot_circle(new_pts)
+            # col = self.check_collision(circle_pixels)
+            # if (col == 1):
+            #     return []
+            # for pix in circle_pixels:
+            #     if self.occupancy_map[pix[0], pix[1]] < 10:
+            #         return []
+                
+            # If not occupied add new pts to path
+            robot_traj = np.hstack(robot_traj, new_pts_wf)
+
+            # Check if new point is close enough to point_s
+            if np.linalg.norm(robot_traj[1:2, robot_traj.shape[1]]) < threshold:
+                tog = 1
+        
         return robot_traj
     
     def robot_controller(self, node_i, point_s):
-        #This controller determines the velocities that will nominally move the robot from node i to node s
-        #Max velocities should be enforced
-        print("TO DO: Implement a control scheme to drive you towards the sampled point")
-        return 0, 0
+        # This controller determines the velocities that will nominally move the robot from node i to node s
+        # Max velocities should be enforced
+        p_lin = 0.1
+        p_ang = 0.1
+
+        dx = point_s[0] - node_i[0]
+        dy = point_s[1] - node_i[1]
+
+        theta_d = np.arctan2(dy,dx)
+        theta_i = node_i[2]
+
+        while theta_d < 0:
+            theta_d += 2*np.pi
+        while theta_i < 0:
+            theta_i += 2*np.pi
+
+        dtheta = theta_d - node_i[2]
+        if dtheta > np.pi:
+            dtheta -= 2*np.pi
+
+        lin_vel = p_lin * np.sqrt(dx**2 + dy**2)
+
+        ang_vel = p_ang * dtheta
+
+        return lin_vel,ang_vel
     
     def trajectory_rollout(self, vel, rot_vel):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
         print("TO DO: Implement a way to rollout the controls chosen")
-        return np.zeros((3, self.num_substeps))
-    
+
+        # Initialize empty trajectory
+        traj = np.zeros((3, self.num_substeps))
+        vel = np.array([[vel, 0, rot_vel]]).T
+
+        # Generate time stamps of sub steps
+        substep_size = timestep / num_substeps
+        rotm = np.eye((3))
+
+        # Run through each substep
+        for i in range(1, self.num_substeps-1):
+            # Build rotation matrix
+            theta = traj[2, i]
+            rotm[0, :] = [np.cos(theta), -np.sin(theta), 0]
+            rotm[1, :] = [np.sin(theta), np.cos(theta), 0]
+            
+            traj[:, i] = traj[:, i-1] + np.reshape(rotm@vel*substep_size, (3,))
+
+        return traj
+        
+        
     def point_to_cell(self, point):
-        #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
-        #point is a 2 by N matrix of points of interest
-        print("TO DO: Implement a method to get the map cell the robot is currently occupying")
-        return 0
+
+        # Get origin values (coordinates of left bottom corner in m)
+        x_origin, y_origin, theta_origin = self.map_settings_dict['origin']
+        resolution = self.map_settings_dict['resolution']
+
+        # Instantiate conversion array
+        points = np.zeros_like(point)
+
+        # Convert metric points to be measured from upper left corner
+        x = point[0, :] + abs(x_origin)
+        y = -1*point[1, :] + abs(y_origin)
+
+        points[0, :] = y / resolution
+        points[1, :] = x / resolution
+
+        return points
 
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
@@ -135,14 +232,20 @@ class PathPlanner:
             robot_locations_rr.append(rr)
             robot_locations_cc.append(cc)
 
-        # print("TO DO: Implement a method to get the pixel locations of the robot path")
 
         return robot_locations_rr, robot_locations_cc
-        #return [], []
 
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
+
+    def check_collision(self, rr, cc):
+
+        if 0 in self.occupancy_map[rr, cc]:
+            return True
+
+        return False
+
     def ball_radius(self):
         #Close neighbor distance
         card_V = len(self.nodes)
@@ -156,27 +259,21 @@ class PathPlanner:
         print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
         return np.zeros((3, self.num_substeps))
     
-    def cost_to_come(self, trajectory_o):
-        #The cost to get to a node from lavalle 
-        print("TO DO: Implement a cost to come metric")
-        # Use the an Euclidean distance metric - Should be admissable
-        # We are getting trajectory_o from trajectory rollout function
-        goal_coords = self.goal_point[0]
-        num_points = trajectory_o.shape[0]
+    def cost_to_come(trajectory):
+        cost = 0
 
-        h_cost = np.empty(num_points, 1)
-
-        # For each point in trajectory use Euclidean Distance as heuristic
-        for i, p in enumerate(trajectory_o):
-            # For each coordinate should only have 2
-            h_cost[i] = np.sqrt((p[0]-goal_coords[0])**2 + (p[1]-goal_coords[1])**2)
-
-        # Options: Could get the min cost amongst trajectory or last or all
-        return h_cost
+        # For each point in trajectory
+        for i in range(1,len(trajectory)):
+            cost += np.linalg.norm(trajectory[i,:2] - trajectory[i-1,:2])
+        return cost
     
     def update_children(self, node_id):
         #Given a node_id with a changed cost, update all connected nodes with the new cost
-        print("TO DO: Update the costs of connected nodes after rewiring.")
+        for child in node_id.children_ids:
+            traj = self.connect_node_to_point(node_id.point,child.point[:2])
+            cost = self.cost_to_come(traj)
+            child.cost = node_id.cost + cost
+            self.update_children(child)
         return
 
     #Planner Functions
@@ -201,28 +298,113 @@ class PathPlanner:
         return self.nodes
     
     def rrt_star_planning(self):
-        #This function performs RRT* for the given map and robot        
-        for i in range(1): #Most likely need more iterations than this to complete the map!
+        #This function performs RRT* for the given map and robot  
+        num_iters = 50
+
+        for i in range(num_iters): #Most likely need more iterations than this to complete the map!
             #Sample
             point = self.sample_map_space()
 
             #Closest Node
-            closest_node_id = self.closest_node(point)
+            closest_node_id = self.closest_node(point) #TODO what is this ID function doing, currently assuming the point is being used as id
 
             #Simulate trajectory
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
 
             #Check for Collision
             print("TO DO: Check for collision.")
+            rr, cc = self.points_to_robot_circle(trajectory_o)
 
-            #Last node rewire
-            print("TO DO: Last node rewiring")
+            
+            # Assuming that we are getting the final part of the path to add to the graph
+            trajectory_end_pt = point
 
-            #Close node rewire
-            print("TO DO: Near point rewiring")
+            if not(self.check_collision(rr, cc)): # TODO get the obstacles
+                # Add node from trajectory_ o to graph
+                path_cost = self.cost_to_come(trajectory_o)
+                new_node = Node(trajectory_end_pt, closest_node_id, path_cost)
+                self.nodes.append(new_node)
+                # Add this node Id to parent node's children
+                new_id = len(self.nodes)-1
+                self.nodes[closest_node_id].children_ids.append(new_id)
+
+
+        
+                # Find shortest CollisionFree path to all near nodes
+                # By iterating through all it should rewire all nodes within ball of radius
+                ## TODO do we need to manually rewire closest_node_id after iterating through all nodes in ball radius
+
+                current_parent_id = closest_node_id
+                for id, node in enumerate(self.nodes):
+                    # Check if the node is in the ball radius
+                    if np.linalg.norm(node.point-trajectory_end_pt) < self.ball_radius():
+
+                        # Get a path between this node and the trajectory_end_pt
+                        trajectory_test = self.simulate_trajectory(node.point,self.nodes[trajectory_end_pt].point)
+                        rr_test, cc_test = self.points_to_robot_circle(trajectory_test)
+                        if not(self.check_collision(rr_test, cc_test)):
+
+                            # If cost is also lower than original then rewire
+                            trajectory_test_end_pt = trajectory_test[-1]
+                            test_path_cost = self.cost_to_come(trajectory_test_end_pt)
+                            if test_path_cost < path_cost:
+
+                                # Update new path cost
+                                path_cost = test_path_cost
+
+                                # Rewire node by deleting old node in graph
+                                self.nodes[new_id].parent_id = id
+                                
+                                # Add this node Id to new parent node's children
+                                self.nodes[id].children_ids.append(new_id)
+
+                                # Remove the node from old old parents id
+                                self.nodes[current_parent_id].children_ids.remove(new_id)
+                                
+                                # Update the new parent id
+                                current_parent_id = id
+                                
+                # Update all nodes in ball radius
+                for id, node in enumerate(self.nodes):
+                    # Check if the node is in the ball radius
+                    new_id = len(self.nodes)-1
+                    if np.linalg.norm(node.point-trajectory_end_pt) < self.ball_radius():
+
+                        # Get a path between this node and the trajectory_end_pt
+                        trajectory_test = self.simulate_trajectory(self.nodes[new_id].point,node.point)
+                        rr_test, cc_test = self.points_to_robot_circle(trajectory_test)
+
+                        # Check if the rewired path is collision free
+                        if (rr_test, cc_test) not in obstacles:
+
+                            # If cost is also lower than original then rewire
+                            trajectory_test_end_pt = trajectory_test[-1]
+                            test_path_cost = self.cost_to_come(trajectory_test)
+                            new_cost = self.nodes[trajectory_end_pt].cost + test_path_cost
+                            old_cost = self.nodes[id].cost
+
+                            if new_cost < old_cost:
+                                current_parent_id = self.nodes[id].parent_id
+                                # Update new path cost
+                                self.nodes[id].cost = new_cost
+
+                                # Rewire node by deleting old node in graph
+                                self.nodes[id].parent_id = new_id
+                                
+                                # Add this node Id to new parent node's children
+                                self.nodes[new_id].children_ids.append(id)
+
+                                # Remove the node from old old parents id
+                                self.nodes[current_parent_id].children_ids.remove(id)
+
+                                # Update children
+                                self.update_children(id)
+
 
             #Check for early end
-            print("TO DO: Check for early end")
+            if np.linalg.norm(trajectory_end_pt[:2] - self.goal_point) < self.stopping_dist:
+                break
+
         return self.nodes
     
     def recover_path(self, node_id = -1):
