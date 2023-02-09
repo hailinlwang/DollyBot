@@ -156,21 +156,28 @@ class PathPlanner:
         #node is a 3 by 1 node
         #point is a 2 by 1 point
         print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
-        threshold = 0.01
-        path = np.zeros((3, self.num_substeps))
+        threshold = 0.10
         tog = 0
-        full_path = np.copy(node_i)
-        # Still confused about timestep vs substep
-        while tog == 1:
-            new_pt = np.array([self.simulate_trajectory(node_i, point_f)]).T
-            full_path = np.hstack(full_path, new_pt)
-            if np.sum((new_pt[0:1, :] - point_f)) < threshold:
-                break
+        path = np.copy(node_i)
+        cnt = 0
+        
+        while tog == 0 and cnt < 20:
+            new_pts = np.array([self.simulate_trajectory(node_i, point_f)]).T
+            # Collision check new_pt
+            circle_pixels = self.points_to_robot_circle(new_pts)
+            for pix in circle_pixels:
+                if self.occupancy_map[pix[0], pix[1]] < 10:
+                    return []
+                
+            # If not occupied add new pts to path
+            path = np.hstack(path, new_pts)
 
-        # Also confused about how to stop moving
-        # Confused about why they want to return a 3 x num_steps instead of a 3 x however many time steps it takes to get there
-        return full_path
+            # If path is occupied 
+            if np.sum((new_pts[0:1, :] - point_f)) < threshold:
+                return path
+        print("ERROR: could not connect nodes")
         return np.zeros((3, self.num_substeps))
+    
     
     def cost_to_come(self, trajectory_o):
         #The cost to get to a node from lavalle 
