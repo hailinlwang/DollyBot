@@ -538,7 +538,7 @@ def main():
     plt.scatter(goal_point_coords[0], goal_point_coords[1], marker='x', color='g')
 
     # nodes = path_planner.rrt_star_planning()
-    nodes = path_planner.rrt_star_planning()
+    nodes = path_planner.fake_planner()
     # node_path_metric = np.hstack(path_planner.recover_path())
 
     # #Leftover test functions
