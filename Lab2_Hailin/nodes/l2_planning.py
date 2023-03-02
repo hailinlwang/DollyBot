@@ -91,7 +91,7 @@ class PathPlanner:
         #lower_threshold = 1
         upper_threshold = 10
         # Continue to take sample points until we find one that isn't duplicate
-        ret_point = np.zeros((3,1))
+        ret_point = np.zeros((2,1))
         while True:
             
             # Get bounding range for map
@@ -297,6 +297,9 @@ class PathPlanner:
     #RRT* specific functions
 
     def check_collision(self, rr, cc):
+        print("\nIN CHECK COLLISION")
+        print(rr)
+        print(cc)
         if 0 in self.occupancy_map[rr.astype(int), cc.astype(int)]:
             return True
         return False
@@ -366,7 +369,7 @@ class PathPlanner:
         print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,2.25])))
         print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,2.25])))
         print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,-0.2])))
-        for i in range(0,20,1):
+        for i in range(0,1,1):
             new_point = self.sample_map_space()
 
             closest_node_id = self.closest_node(new_point)
@@ -374,15 +377,15 @@ class PathPlanner:
             #Simulate driving the robot towards the closest point
             # print(self.nodes)
             closest_point = self.nodes[closest_node_id].point
-            print(closest_point)
-            print("new_point", new_point)
+            # print(closest_point)
+            # print("new_point", new_point)
             trajectory_o = self.simulate_trajectory(closest_point, new_point)
             # print(trajectory_o)
-            print(trajectory_o.shape)
+            # print(trajectory_o.shape)
 
             # Add node to list
             path_cost = self.cost_to_come(trajectory_o)
-            new_node = Node(new_point, closest_node_id, path_cost)
+            new_node = Node(trajectory_o[:,-1].reshape((3,1)), closest_node_id, path_cost)
             self.nodes.append(new_node)
             
             for i in range(0,int(len(trajectory_o[0])/5)):
