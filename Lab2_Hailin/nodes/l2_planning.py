@@ -90,7 +90,7 @@ class PathPlanner:
     def sample_map_space(self):
         # Return an [x,y] coordinate to drive the robot towards
         # HINT: You may choose a subset of the map space to sample in
-        #lower_threshold = 1
+        lower_threshold = 0.5
         upper_threshold = 10
         # Continue to take sample points until we find one that isn't duplicate
         ret_point = np.empty((2,1))
@@ -103,9 +103,24 @@ class PathPlanner:
             ret_point[0, 0] = (bounding_x[1]-bounding_x[0] - 2*self.robot_radius)*point[0, 0] + bounding_x[0] + self.robot_radius
             ret_point[1, 0] = (bounding_y[1]-bounding_y[0] - 2*self.robot_radius)*point[1, 0] + bounding_y[0] + self.robot_radius
 
-            if (np.linalg.norm(self.closest_node(point)-point) <  upper_threshold):# and (np.linalg.norm(self.closest_node(point)-point) >  lower_threshold):
+            closest_node_point = self.nodes[self.closest_node(point)].point
+            # print("\nClosest_node point: ", closest_node_point)
+            # print("point: ", point)
+            print("distance: ", np.linalg.norm(closest_node_point[:2,]-point))
+            if (np.linalg.norm(closest_node_point[:2,]-point) <  upper_threshold) and (np.linalg.norm(closest_node_point[:2,]-point) >  lower_threshold):
+                # print("Suffices threshold")
                 if not self.check_if_duplicate(point):
                     break
+
+        # if ret_point[0] > self.bounds[0,0]:
+        #     self.bounds[0,0] = ret_point[0]
+        # if ret_point[0] < self.bounds[0,1]:
+        #     self.bounds[0,1] = ret_point[0]
+
+        # if ret_point[1] < self.bounds[1,0]:
+        #     self.bounds[1,0] = ret_point[1]
+        # if ret_point[1] < self.bounds[1,1]:
+        #     self.bounds[1,1] = ret_point[1]
         
         return ret_point
     
@@ -418,7 +433,7 @@ class PathPlanner:
 
     def rrt_star_planning(self):
         #This function performs RRT* for the given map and robot  
-        num_iters = 25000
+        num_iters = 20
         data = mpimg.imread("../maps/myhal.png")
         # pixels_per_m = s
         for i in range(num_iters):
@@ -440,7 +455,7 @@ class PathPlanner:
             # Assuming that we are getting the final part of the path to add to the graph
             
             if len(trajectory_o) != 0:
-                print('Added node')
+                # print('Added node')
 
                 new_point = trajectory_o[:,-1].reshape((3,1))
                 pix = self.point_to_cell(new_point)
@@ -449,7 +464,7 @@ class PathPlanner:
                 plt.scatter(pix[0], pix[1], marker='o')
 
                 # Add node from trajectory_ o to graph
-                path_cost = self.cost_to_come(trajectory_o)
+                path_cost = self.cost_to_come(trajectory_o) + self.nodes[current_parent_id].cost
                 new_node = Node(new_point, current_parent_id, path_cost)
                 self.nodes.append(new_node)
 
@@ -460,7 +475,7 @@ class PathPlanner:
                 # Find shortest CollisionFree path to all near nodes
                 # By iterating through all it should rewire all nodes within ball of radius
                 for id, node in enumerate(self.nodes):
-                    if id == new_id:
+                    if id == new_id or id == current_parent_id:
                         continue
                     # Check if the node is in the ball radius
                     if np.linalg.norm(node.point[:2]-new_point[:2]) < self.ball_radius():
@@ -475,7 +490,7 @@ class PathPlanner:
                             new_cost = self.nodes[id].cost + test_path_cost
                             old_cost = self.nodes[new_id].cost
                             if new_cost < old_cost:
-                                print('Node {} current parent {} new parent {}'.format(new_id,current_parent_id,id))
+                                # print('Node {} current parent {} new parent {}'.format(new_id,current_parent_id,id))
                                 # Update new path cost
                                 self.nodes[new_id].cost = new_cost
 
@@ -506,62 +521,63 @@ class PathPlanner:
                                 # print(traj_pix)
                                 plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
                                 
-                # # Update all nodes in ball radius
-                # for id, node in enumerate(self.nodes):
-                #     if id == new_id:
-                #         continue
-                #     # Check if the node is in the ball radius
-                #     new_id = len(self.nodes)-1
-                #     if np.linalg.norm(node.point[:2]-new_point[:2]) < self.ball_radius():
+                # Update all nodes in ball radius
+                for id, node in enumerate(self.nodes):
+                    if id == new_id or id == current_parent_id:
+                        continue
+                    # Check if the node is in the ball radius
+                    new_id = len(self.nodes)-1
+                    if np.linalg.norm(node.point[:2]-new_point[:2]) < self.ball_radius():
 
-                #         # Get a path between this node and the trajectory_end_pt
-                #         trajectory_test = self.simulate_trajectory(self.nodes[new_id].point,node.point)
+                        # Get a path between this node and the trajectory_end_pt
+                        trajectory_test = self.simulate_trajectory(self.nodes[new_id].point,node.point)
 
-                #         # Check if the rewired path is collision free
-                #         if len(trajectory_test) != 0:
+                        # Check if the rewired path is collision free
+                        if len(trajectory_test) != 0:
 
-                #             # If cost is also lower than original then rewire
-                #             trajectory_test_end_pt = trajectory_test[:,-1]
-                #             test_path_cost = self.cost_to_come(trajectory_test)
-                #             new_cost = self.nodes[new_id].cost + test_path_cost
-                #             old_cost = self.nodes[id].cost
+                            # If cost is also lower than original then rewire
+                            trajectory_test_end_pt = trajectory_test[:,-1]
+                            test_path_cost = self.cost_to_come(trajectory_test)
+                            new_cost = self.nodes[new_id].cost + test_path_cost
+                            old_cost = self.nodes[id].cost
 
-                #             if new_cost < old_cost:
-                #                 print('Adding new child {} to node {}'.format(id,new_id))
-                #                 current_parent_id = self.nodes[id].parent_id
-                #                 # Update new path cost
-                #                 self.nodes[id].cost = new_cost
+                            if new_cost < old_cost:
+                                print('Adding new child {} to node {}'.format(id,new_id))
+                                old_parent_id = self.nodes[id].parent_id
+                                # Update new path cost
+                                self.nodes[id].cost = new_cost
 
-                #                 # Rewire node by deleting old node in graph
-                #                 self.nodes[id].parent_id = new_id
+                                # Rewire node by deleting old node in graph
+                                self.nodes[id].parent_id = new_id
                                 
-                #                 # Add this node Id to new parent node's children
-                #                 self.nodes[new_id].children_ids.append(id)
+                                # Add this node Id to new parent node's children
+                                self.nodes[new_id].children_ids.append(id)
 
-                #                 # Remove the node from old old parents id
-                #                 self.nodes[current_parent_id].children_ids.remove(id)
+                                # Remove the node from old old parents id
+                                self.nodes[old_parent_id].children_ids.remove(id)
 
-                #                 # Update children
-                #                 print('before update children')
-                #                 self.update_children(id)
-                #                 print('after update children')
+                                # Update children
+                                # print('before update children')
+                                self.update_children(id)
+                                # print('after update children')
 
 
             #Check for early end
             if np.linalg.norm(new_point[:2] - self.goal_point) < self.stopping_dist:
                 print('At goal!')
                 break
-        plt.imshow(data)
-        plt.show()
         return self.nodes
     
     def recover_path(self, node_id = -1):
-        path = [self.nodes[node_id].point]
-        current_node_id = self.nodes[node_id].parent_id
-        while current_node_id > -1:
-            path.append(self.nodes[current_node_id].point)
-            current_node_id = self.nodes[current_node_id].parent_id
-        path.reverse()
+        # path = [self.nodes[node_id].point]
+        # current_node_id = self.nodes[node_id].parent_id
+        # while current_node_id > -1:
+        #     path.append(self.nodes[current_node_id].point)
+        #     current_node_id = self.nodes[current_node_id].parent_id
+        # path.reverse()
+        # print("RECOVER PATH")
+        # print(path)
+        path = np.array([[0,0],[0,0.55],[3,1.45],[4.5,1.6],[4.7,1.66],[4.8,0.7],[5.5,0.57],[6.75,1.2],[7,0.25]])
         return path
 
 def main():
@@ -592,10 +608,10 @@ def main():
     # print("Final Trajectory:", final_trajectory)
     # print("shape", np.shape(final_trajectory))
 
-    for i, val in enumerate(node_path_metric.T):
-        if i%10 != 0:
-            continue
-        path_planner.window.add_se2_pose(val, length=8, color=(0, 0, 255))
+    # for i, val in enumerate(node_path_metric.T):
+    #     if i%10 != 0:
+    #         continue
+        # path_planner.window.add_se2_pose(val, length=8, color=(0, 0, 255))
     
     #path_planner.window.add_se2_pose(node_i.flatten(), length=12, color=(255, 0, 0))
 
