@@ -167,10 +167,28 @@ class PathPlanner:
             robot_traj = np.hstack((robot_traj, new_pts_wf))
 
             # Collision check new_pt
+<<<<<<< Updated upstream
             # circle_pixels = self.points_to_robot_circle(new_pts)
             # col = self.check_collision(circle_pixels)
             # if (col == 1):
             #     return []
+=======
+            ## TODO check why new_pts and not new_pts_wf used below
+            print("IN SIMULATE TRAJECTORY ")
+            if robot_traj.any()<0:
+                return []
+            rr,cc = self.points_to_robot_circle(new_pts_wf)
+            # CHeck if outside of bounds TODO change from hardcoded
+            for i in range(len(rr)):
+                if rr[i] > 48 or cc[i]>148:
+                    return []
+            if len(rr)<1:
+                return []
+
+            col = self.check_collision(rr,cc)
+            if (col == 1):
+                return []
+>>>>>>> Stashed changes
             # for pix in circle_pixels:
             #     if self.occupancy_map[pix[0], pix[1]] < 10:
             #         return []
@@ -280,7 +298,33 @@ class PathPlanner:
 
         return points
 
+    def point_to_cell_multi(self, point):
+        # Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
+        # point is a 2 by N matrix of points of interest
+        # input: point (2xN array)        - points of interest expressed in origin (map) reference frame {I}
+        # output: map_indices (2xN array) - points converted to indices wrt top left
+        
+        # convert from map reference frame {I} to bottom-left ref frame {B}
+        # position vector: r_B = r_I + r_BI = r_I - r_IB (offset vector from yaml file)
+
+        x_B = point[0,:] - self.map_settings_dict["origin"][0] 
+        y_B = point[1,:] - self.map_settings_dict["origin"][1]
+
+        # need to convert to index by dividing by resolution (*1/0.05 = *20)
+        height = self.map_shape[1]*self.map_settings_dict["resolution"]          # map height in meters
+        x_idx = (x_B/self.map_settings_dict["resolution"]).astype(int)
+        
+        # print("self.map_shape[1]: ", self.map_shape[1])
+        # print("Height: ", height)
+
+        y_idx = ((y_B)/self.map_settings_dict["resolution"]).astype(int)  # y_B is wrt bottom left, while y_idx is wrt top left
+        map_indices = np.vstack((x_idx,y_idx))
+
+        
+        return map_indices
+
     def points_to_robot_circle(self, points):
+<<<<<<< Updated upstream
         #Convert a series of [x,y] points to robot map footprints for collision detection
         #Hint: The disk function is included to help you with this function
 
@@ -320,6 +364,45 @@ class PathPlanner:
         if 0 in self.occupancy_map[rr, cc]:
             return True
 
+=======
+        # Convert a series of [x,y] points to robot map footprints for collision detection
+        # Hint: The disk function is included to help you with this function
+        print("IN POINT TO ROBOT CIRCLE")
+        print("points, ", points)
+        print("points.shape, ", points.shape)
+        # print("points.shape[0,:], ", points[0,:].shape)
+        # print("points.shape[1,:], ", points[1,:].shape)
+        # points_idx = self.point_to_cell_multi(points)         # convert to occupancy grid indexes (pixels)
+        points_idx = (points*20).astype(int)
+        pixel_radius = self.robot_radius*20         # robot radius in pixels
+        footprint = [[],[]]
+        print("points_idx", points_idx.shape)
+        print("points_idx", points_idx)
+        for j in range(len(points_idx[0])):
+            rr, cc = disk((points_idx[0,j], points_idx[1,j]), pixel_radius, shape=(1000,1000))
+            footprint = np.hstack((footprint,np.vstack((rr,cc))))
+        print("footprint.shape", footprint.shape)
+        return footprint
+    #Note: If you have corr
+    #RRT* specific functions
+
+    def check_collision(self, rr, cc):
+        # 
+        if min(rr) < 1 or max(rr) > self.occupancy_map.shape[0]:
+            print("close to  edge")
+            return True
+        if min(cc) < 1 or max(cc) > self.occupancy_map.shape[1]:
+            print("Close to y edge")
+            return True
+        black = [0,0,0,1]
+        if black in self.occupancy_map[rr.astype(int), cc.astype(int)].tolist():
+            print(self.occupancy_map[rr.astype(int), cc.astype(int)])
+            print("On obstacle")
+            return True
+        # for i in range(0,self.occupancy_map.shape[1],1):
+        #     if np.array_equal(self.occupancy_map[i,:], black)
+        #     return True
+>>>>>>> Stashed changes
         return False
 
     def ball_radius(self):
@@ -373,6 +456,65 @@ class PathPlanner:
             print("TO DO: Check if at goal point.")
         return self.nodes
     
+<<<<<<< Updated upstream
+=======
+
+    def fake_planner(self):
+        data = mpimg.imread("../maps/myhal.png")
+        plt.imshow(data)
+        print(data.shape)
+        x = []
+        y = []
+        fp_x = []
+        fp_y = []
+        print("Bounding box is: ", self.bounds)
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,-0.2])))
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,2.25])))
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,2.25])))
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,-0.2])))
+        for i in range(0,20,1):
+            new_point = self.sample_map_space()
+
+            closest_node_id = self.closest_node(new_point)
+
+            #Simulate driving the robot towards the closest point
+            # print(self.nodes)
+            closest_point = self.nodes[closest_node_id].point
+            # print(closest_point)
+            # print("new_point", new_point)
+            trajectory_o = self.simulate_trajectory(closest_point, new_point)
+            # print(trajectory_o)
+            # print(trajectory_o.shape)
+
+            if trajectory_o != []:
+                # # Add node to list
+                # path_cost = self.cost_to_come(trajectory_o)
+                # new_node = Node(trajectory_o[:,-1].reshape((3,1)), closest_node_id, path_cost)
+                # self.nodes.append(new_node)
+                
+                for i in range(0,int(len(trajectory_o[0])/5)):
+                    # print("trajectory_o[0:2,i]")
+                    # print(trajectory_o[0:2,i])
+                    traj_pix = self.point_to_cell(trajectory_o[0:2,i*5])
+                    # print(traj_pix)
+                    plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
+
+            
+
+            # Put in pixel coords for plotting
+            pix = self.point_to_cell(new_point)
+            footprint = self.points_to_robot_circle(new_point)
+            plt.scatter(footprint[0], footprint[1], color='r')
+            plt.scatter(pix[0], pix[1], marker='o')
+        
+        plt.scatter(self.point_to_cell(np.array([7.75,2.25]))[0], self.point_to_cell(np.array([7.75,2.25]))[1], marker='x')
+        plt.scatter(self.point_to_cell(np.array([-0.2,2.25]))[0], self.point_to_cell(np.array([-0.2,2.25]))[1], marker='x')
+        plt.scatter(self.point_to_cell(np.array([-0.2,-0.2]))[0], self.point_to_cell(np.array([-0.2,-0.2]))[1], marker='x')
+        plt.scatter(self.point_to_cell(np.array([7.75,-0.2]))[0], self.point_to_cell(np.array([7.75,-0.2]))[1], marker='x')
+        plt.show()
+        return 0
+
+>>>>>>> Stashed changes
     def rrt_star_planning(self):
         #This function performs RRT* for the given map and robot  
         num_iters = 20
