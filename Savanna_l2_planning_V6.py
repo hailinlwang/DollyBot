@@ -96,13 +96,14 @@ class PathPlanner:
         bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
 
         # if len(self.nodes) != 1:
-        if num_samples < 10:
+        if num_samples < 5:
             closest_id = self.closest_node(self.goal_point)
         else:
-            closest_id = random.randint(len(self.nodes) - num_samples, len(self.nodes))
+            closest_id = random.randint(round(len(self.nodes)/2), len(self.nodes))
+
         closest_point = self.nodes[closest_id].point
-        x_rng = num_samples + 4
-        y_rng = num_samples + 2
+        x_rng = (num_samples*0.25) + 2
+        y_rng = (num_samples*0.25) + 2
         xmin = max(closest_point[0] - x_rng,bounding_x[0]) 
         xmax = min(closest_point[0] + x_rng,bounding_x[1]) 
         ymin = max(closest_point[1] - y_rng,bounding_y[0]) 
@@ -148,7 +149,7 @@ class PathPlanner:
 
             # Get distant from current point to node point
             # dist = np.linalg.norm(point[:2]-node.point[:2])
-            dist = np.sqrt((point[0, 0] - node.point[0])**2 + (point[1, 0] - node.point[1])**2)
+            dist = np.sqrt((point[0, 0] - node.point[0, 0])**2 + (point[1, 0] - node.point[1, 0])**2)
 
             # Update if necessary
             if dist < closest_dist:
