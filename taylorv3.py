@@ -54,11 +54,13 @@ class PathPlanner:
         self.rot_vel_max = 1.82 #rad/s (Feel free to change!)
 
         #Goal Parameters
-        self.goal_point = goal_point.reshape((2,1)) #m
+        self.goal_set = goal_point #m
+        self.goal_point = self.goal_set[0].reshape((2,1))
+        self.goal_index = 0
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 0.5 #s
+        self.timestep = 0.3 #s
         self.num_substeps = 10
 
         #Planning storage
@@ -100,8 +102,15 @@ class PathPlanner:
             closest_id = random.randint(round(len(self.nodes)/2), len(self.nodes))
 
         closest_point = self.nodes[closest_id].point
-        x_rng = (num_samples*0.25) + 4
-        y_rng = (num_samples*0.25) + 4
+        dist_to_goal = np.linalg.norm(closest_point[:2,0] - self.goal_point.reshape((1,2)))
+        if dist_to_goal < 5:
+            x_rng = dist_to_goal
+            y_rng = dist_to_goal
+            # if dist_to_goal < 1:
+            #     closest_point = self.goal_point
+        else:
+            x_rng = (num_samples*0.25) + 4
+            y_rng = (num_samples*0.25) + 4
         xmin = max(closest_point[0] - x_rng,bounding_x[0]) 
         xmax = min(closest_point[0] + x_rng,bounding_x[1]) 
         ymin = max(closest_point[1] - y_rng,bounding_y[0]) 
@@ -393,18 +402,18 @@ class PathPlanner:
 
                 # Closest Node
                 current_parent_id = self.closest_node(new__sampled_point) 
-                print(self.nodes[current_parent_id].point)
+                #print(self.nodes[current_parent_id].point)
 
                 # Simulate trajectory
                 trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new__sampled_point[:2])
 
-                print(trajectory_o)
+                #print(trajectory_o)
             
             # Assuming that we are getting the final part of the path to add to the graph
             
             if len(trajectory_o) != 0:
                 i+=1
-                print('Added node', new__sampled_point[0,0], " , ", new__sampled_point[1,0])
+                #print('Added node', new__sampled_point[0,0], " , ", new__sampled_point[1,0])
 
                 new_point = trajectory_o[:,-1].reshape((3,1))
                 pix = self.point_to_cell(new_point)
@@ -427,11 +436,17 @@ class PathPlanner:
                 # Add this node Id to parent node's children
                 new_id = len(self.nodes)-1
                 self.nodes[current_parent_id].children_ids.append(new_id)
-
+                print('Dist to goal:')
+                print(np.linalg.norm(new_point[:2,0] - self.goal_point.reshape(1,2)))
                 # Check if at goal
-                if np.linalg.norm(new_point[:2,0] - self.goal_point.reshape((2,1))) < self.stopping_dist:
-                    print('At goal!')
-                    break
+                if np.linalg.norm(new_point[:2,0] - self.goal_point.reshape((1,2))) < self.stopping_dist:
+                    self.goal_index += 1
+                    if self.goal_index == len(self.goal_set):
+                        print('Done!')
+                        break
+                    else:
+                        print('Intermediate goal acheived')
+                        self.goal_point = self.goal_set[self.goal_index].reshape((2,1))
 
         return self.nodes
     
@@ -466,7 +481,7 @@ class PathPlanner:
                 i+=1
                 
                 new_point = trajectory_o[:,-1].reshape((3,1))
-                print('Added node', new_point)
+                #print('Added node', new_point)
                 pix = self.point_to_cell(new_point)
                 footprint = self.points_to_robot_circle(new_point)
 
@@ -479,10 +494,10 @@ class PathPlanner:
                 plt.scatter(pix[0], pix[1], marker='o')
                 tree = np.hstack((tree, pix))
                 tree = np.hstack((tree, footprint))
-                if i%50 == 0:
-                    plt.scatter(tree[0,:], tree[1,:])
-                    plt.imshow(data)
-                    plt.show()
+                if i%100 == 0:
+                   plt.scatter(tree[0,:], tree[1,:])
+                   plt.imshow(data)
+                   plt.show()
 
                 # Add this node Id to parent node's children
                 new_id = len(self.nodes)-1
@@ -566,12 +581,18 @@ class PathPlanner:
                                 # Update children
                                 self.update_children(id)
 
-                print(new_point[:2])
+                #print(new_point[:2])
+                print('Dist to goal:')
                 print(np.linalg.norm(new_point[:2,0] - self.goal_point.reshape(1,2)))
             #Check for early end
                 if np.linalg.norm(new_point[:2,0] - self.goal_point.reshape((1,2))) < self.stopping_dist:
-                    print('At goal!')
-                    break
+                    self.goal_index += 1
+                    if self.goal_index == len(self.goal_set):
+                        print('Done!')
+                        break
+                    else:
+                        print('Intermediate goal acheived')
+                        self.goal_point = self.goal_set[self.goal_index].reshape((2,1))
 
         return self.nodes
     
@@ -590,7 +611,9 @@ def main():
     map_setings_filename = "willowgarageworld_05res.yaml"
 
     #robot information
-    goal_point = np.array([42, 26]) #m
+    # 15.5,8 -- 20,14 -- 30,20 --35,23 -- 42,26
+    goal_set = np.array([[10.5,-19],[10,2],[15,3],[15.5,8],[20,14],[30,20],[35,23],[42,25]])
+    goal_point = np.array([41, 25]) #m
     # goal_point = np.array([0, 0]) #m
 
     stopping_dist = 0.5 #m
@@ -599,16 +622,18 @@ def main():
     plt.imshow(data)
 
     #RRT precursor
-    path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    goal_point_coords = path_planner.point_to_cell(goal_point)
-    print("goal_point_coords: ", goal_point_coords)
-    plt.scatter(goal_point_coords[0], goal_point_coords[1], marker='x', color='g')
-    plt.show()
+    path_planner = PathPlanner(map_filename, map_setings_filename, goal_set, stopping_dist)
+    # goal_point_coords = path_planner.point_to_cell(goal_point)
+    # print("goal_point_coords: ", goal_point_coords)
+    # plt.scatter(goal_point_coords[0], goal_point_coords[1], marker='x', color='g')
+    # plt.show()
+    # return
 
     nodes = path_planner.rrt_star_planning()
-    #nodes = path_planner.rrt_planning()
+    # nodes = path_planner.rrt_planning()
     node_path_metric = np.hstack(path_planner.recover_path())
     print(node_path_metric)
+    np.save("shortest_path.npy", node_path_metric)
 
     
     if len(node_path_metric) != 0:
@@ -623,17 +648,17 @@ def main():
     data = mpimg.imread('../maps/willowgarageworld_05res.png')        
     plt.imshow(data)
     plt.show()
-        # #Plot paths
-        # for i in range(1,len(node_path_metric),1):
-        #     start = node_path_metric(i-1).reshape((3,1))
-        #     end = node_path_metric(i).reshape((3,1))
-        #     traj = path_planner.connect_node_to_point(start,end[:2])
+    #     # #Plot paths
+    #     # for i in range(1,len(node_path_metric),1):
+    #     #     start = node_path_metric(i-1).reshape((3,1))
+    #     #     end = node_path_metric(i).reshape((3,1))
+    #     #     traj = path_planner.connect_node_to_point(start,end[:2])
 
-        #     for j in range(0,int(len(traj[0])),5):
-        #         traj_pix = path_planner.point_to_cell(traj[0:2,j])
-        #         plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
+    #     #     for j in range(0,int(len(traj[0])),5):
+    #     #         traj_pix = path_planner.point_to_cell(traj[0:2,j])
+    #     #         plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
 
-    # #Leftover test functions
+    # # #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
 
     # node_i = np.array([[0, 0, 2.5]]).T
