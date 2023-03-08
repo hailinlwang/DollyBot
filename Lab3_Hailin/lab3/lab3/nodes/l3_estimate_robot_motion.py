@@ -76,8 +76,27 @@ class WheelOdom:
             # update calculated pose and twist with new data
             le = sensor_state_msg.left_encoder
             re = sensor_state_msg.right_encoder
+            t_1 = sensor_state_msg.header.stamp
 
             # # YOUR CODE HERE!!!
+            del_le = le - self.last_enc_l
+            del_re = re - self.last_enc_r
+            del_enc = np.array([[del_le],[del_re]]) # TODO May need to multiply by some ticks
+
+            h = t_1 - self.last_time 
+
+            x_t = self.pose.orientation.x
+            y_t = self.pose.orientation.y
+            theta = self.pose.orientation
+
+            A_1 = np.array([[np.cos(theta),0],[np.sin(theta),0],[0,1]])
+            A_2 = np.array([[WHEEL_RADIUS/2,WHEEL_RADIUS/2],[WHEEL_RADIUS/(2*BASELINE),-WHEEL_RADIUS/(2*BASELINE)]])
+            A = np.matmul(A_1, A_2)
+
+            q_t = np.array([[x_t],[y_t],[theta]])
+            q_t_h = q_t + h*np.matmul(A,del_enc)
+
+
             # Update your odom estimates with the latest encoder measurements and populate the relevant area
             # of self.pose and self.twist with estimated position, heading and velocity
 
