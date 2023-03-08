@@ -469,6 +469,65 @@ class PathPlanner:
 
         return self.nodes
     
+<<<<<<< Updated upstream
+=======
+
+    def fake_planner(self):
+        data = mpimg.imread("../maps/myhal.png")
+        plt.imshow(data)
+        print(data.shape)
+        x = []
+        y = []
+        fp_x = []
+        fp_y = []
+        print("Bounding box is: ", self.bounds)
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,-0.2])))
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,2.25])))
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,2.25])))
+        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,-0.2])))
+        for i in range(0,20,1):
+            new_point = self.sample_map_space()
+
+            closest_node_id = self.closest_node(new_point)
+
+            #Simulate driving the robot towards the closest point
+            # print(self.nodes)
+            closest_point = self.nodes[closest_node_id].point
+            # print(closest_point)
+            # print("new_point", new_point)
+            trajectory_o = self.simulate_trajectory(closest_point, new_point)
+            # print(trajectory_o)
+            # print(trajectory_o.shape)
+
+            if trajectory_o != []:
+                # # Add node to list
+                # path_cost = self.cost_to_come(trajectory_o)
+                # new_node = Node(trajectory_o[:,-1].reshape((3,1)), closest_node_id, path_cost)
+                # self.nodes.append(new_node)
+                
+                for i in range(0,int(len(trajectory_o[0])/5)):
+                    # print("trajectory_o[0:2,i]")
+                    # print(trajectory_o[0:2,i])
+                    traj_pix = self.point_to_cell(trajectory_o[0:2,i*5])
+                    # print(traj_pix)
+                    plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
+
+            
+
+            # Put in pixel coords for plotting
+            pix = self.point_to_cell(new_point)
+            footprint = self.points_to_robot_circle(new_point)
+            plt.scatter(footprint[0], footprint[1], color='r')
+            plt.scatter(pix[0], pix[1], marker='o')
+        
+        plt.scatter(self.point_to_cell(np.array([7.75,2.25]))[0], self.point_to_cell(np.array([7.75,2.25]))[1], marker='x')
+        plt.scatter(self.point_to_cell(np.array([-0.2,2.25]))[0], self.point_to_cell(np.array([-0.2,2.25]))[1], marker='x')
+        plt.scatter(self.point_to_cell(np.array([-0.2,-0.2]))[0], self.point_to_cell(np.array([-0.2,-0.2]))[1], marker='x')
+        plt.scatter(self.point_to_cell(np.array([7.75,-0.2]))[0], self.point_to_cell(np.array([7.75,-0.2]))[1], marker='x')
+        plt.show()
+        return 0
+
+>>>>>>> Stashed changes
     def rrt_star_planning(self):
         #This function performs RRT* for the given map and robot  
         num_iters = 10000

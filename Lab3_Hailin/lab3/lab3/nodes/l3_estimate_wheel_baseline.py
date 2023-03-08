@@ -77,9 +77,9 @@ class wheelBaselineEstimator():
             # # YOUR CODE HERE!!!
             # Calculate the radius of the wheel based on encoder measurements
 
-            # separation = ##
-            # print('Calibrated Separation: {} m'.format(separation))
-
+            # separation = WHEEL_RADIUS
+            separation = (WHEEL_RADIUS/2)*(TICKS_PER_ROTATION*(self.del_right_encoder + self.del_left_encoder))/(NUM_ROTATIONS)
+            print('Calibrated Separation: {} m'.format(separation))
             #Reset the robot and calibration routine
             self.lock.acquire()
             self.left_encoder_prev = None
