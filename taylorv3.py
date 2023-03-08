@@ -54,16 +54,17 @@ class PathPlanner:
         self.rot_vel_max = 1.82 #rad/s (Feel free to change!)
 
         #Goal Parameters
-        self.goal_point = goal_point.reshape((2,1)) #m
+        self.goal_set = goal_point #m
+        self.goal_point = self.goal_set[0].reshape((2,1))
+        self.goal_index = 0
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 0.5 #s
+        self.timestep = 0.3 #s
         self.num_substeps = 10
 
         #Planning storage
         start_pt = np.array([[0],[-19],[0]])
-        # start_pt = np.array([[40.5],[25],[0]])
         print(start_pt.shape)
         self.nodes = [Node(start_pt, -1, 0)]
 
@@ -83,9 +84,7 @@ class PathPlanner:
         
         # Assuming that a node's ID is its index in the node list
         for node in self.nodes:
-
-            if np.linalg.norm(point[:2] - node.point[:2]) < 0.5:
-            #if point[0] == node.point[0] and point[1] == node.point[1] :
+            if np.linalg.norm(point[:2,0] - node.point[:2,0]) < 0.5:
                 return True
 
         return False
@@ -95,29 +94,29 @@ class PathPlanner:
         # Return an [x,y] coordinate to drive the robot towards
         # HINT: You may choose a subset of the map space to sample in
         bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
-        closest_id = self.closest_node(self.goal_point)
-        closest_point = self.nodes[closest_id].point
-        exp = 0
-
-        if num_samples % 5 == 0 and num_samples != 0:
-            closest_point = np.array([[40.5],[25],[0]])
 
         # if len(self.nodes) != 1:
-        if num_samples > 20:
-            exp = num_samples*0.05
-        #     closest_id = random.randint(round(len(self.nodes)/2), len(self.nodes)-1)
-        #     closest_point = self.nodes[closest_id].point
+        if num_samples < 5:
+            closest_id = self.closest_node(self.goal_point)
+        else:
+            closest_id = random.randint(round(len(self.nodes)/2), len(self.nodes))
 
-        x_rng = 2 + (exp*0.25)
-        y_rng = 2.5 + exp
+        closest_point = self.nodes[closest_id].point
+        dist_to_goal = np.linalg.norm(closest_point[:2,0] - self.goal_point.reshape((1,2)))
+        if dist_to_goal < 5:
+            x_rng = dist_to_goal
+            y_rng = dist_to_goal
+            # if dist_to_goal < 1:
+            #     closest_point = self.goal_point
+        else:
+            x_rng = (num_samples*0.25) + 4
+            y_rng = (num_samples*0.25) + 4
         xmin = max(closest_point[0] - x_rng,bounding_x[0]) 
         xmax = min(closest_point[0] + x_rng,bounding_x[1]) 
         ymin = max(closest_point[1] - y_rng,bounding_y[0]) 
         ymax = min(closest_point[1] + y_rng,bounding_y[1]) 
-    
         ret_point = np.empty((2,1))
-        # print("Closest point is: ", closest_point)
-
+        #print("Closest point is: ", closest_point)
         while True:
             point = np.random.rand(2, 1)
             ret_point[0, 0] = (xmax-xmin - 2*self.robot_radius)*point[0, 0] + xmin + self.robot_radius
@@ -125,25 +124,6 @@ class PathPlanner:
 
             if not self.check_if_duplicate(ret_point):
                 break
-    # else:
-
-        #     #lower_threshold = 1
-        #     upper_threshold = 5
-        #     # Continue to take sample points until we find one that isn't duplicate
-        #     ret_point = np.empty((2,1))
-
-        #     while True:
-                
-        #         # Get bounding range for map
-        #         bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
-        #         # Generate random values for x and y
-        #         point = np.random.rand(2, 1)
-        #         ret_point[0, 0] = (bounding_x[1]-bounding_x[0] - 2*self.robot_radius)*point[0, 0] + bounding_x[0] + self.robot_radius
-        #         ret_point[1, 0] = (bounding_y[1]-bounding_y[0] - 2*self.robot_radius)*point[1, 0] + bounding_y[0] + self.robot_radius
-
-        #         if (np.linalg.norm(self.closest_node(ret_point)-ret_point) <  upper_threshold):
-        #             if not self.check_if_duplicate(ret_point):
-        #                 break
         
         return ret_point
     
@@ -156,8 +136,8 @@ class PathPlanner:
         for i, node in enumerate(self.nodes):
 
             # Get distant from current point to node point
-            # dist = np.linalg.norm(point[:2]-node.point[:2])
-            dist = np.sqrt((point[0, 0] - node.point[0, 0])**2 + (point[1, 0] - node.point[1, 0])**2)
+            dist = np.linalg.norm(point[:2,0]-node.point[:2,0])
+            #dist = np.sqrt((point[0, 0] - node.point[0, 0])**2 + (point[1, 0] - node.point[1, 0])**2)
 
             # Update if necessary
             if dist < closest_dist:
@@ -416,25 +396,24 @@ class PathPlanner:
             while len(trajectory_o) == 0:
 
                 new__sampled_point = self.sample_map_space(num_samples)
+                #print("Sampled point at", new__sampled_point)
 
-                # print("Sampled point at", new__sampled_point)
-
-                num_samples += 1
+                num_samples = num_samples + (0.5*num_samples)
 
                 # Closest Node
                 current_parent_id = self.closest_node(new__sampled_point) 
-                # print(self.nodes[current_parent_id].point)
+                #print(self.nodes[current_parent_id].point)
 
                 # Simulate trajectory
                 trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new__sampled_point[:2])
 
-                # print(trajectory_o)
+                #print(trajectory_o)
             
             # Assuming that we are getting the final part of the path to add to the graph
             
             if len(trajectory_o) != 0:
                 i+=1
-                print('Added node', new__sampled_point[0,0], " , ", new__sampled_point[1,0])
+                #print('Added node', new__sampled_point[0,0], " , ", new__sampled_point[1,0])
 
                 new_point = trajectory_o[:,-1].reshape((3,1))
                 pix = self.point_to_cell(new_point)
@@ -444,7 +423,7 @@ class PathPlanner:
                 plt.scatter(pix[0], pix[1], marker='o')
                 tree = np.hstack((tree, pix))
                 tree = np.hstack((tree, footprint))
-                if i%70 == 0:
+                if i%20 == 0:
                     plt.scatter(tree[0,:], tree[1,:])
                     plt.imshow(data)
                     plt.show()
@@ -457,99 +436,39 @@ class PathPlanner:
                 # Add this node Id to parent node's children
                 new_id = len(self.nodes)-1
                 self.nodes[current_parent_id].children_ids.append(new_id)
-                # print('Initial parent {} for node {}'.format(current_parent_id,new_id))
-
+                print('Dist to goal:')
+                print(np.linalg.norm(new_point[:2,0] - self.goal_point.reshape(1,2)))
                 # Check if at goal
-                # print("new point shape is: ",new_point[:2].shape)
-                dist_to_goal = np.linalg.norm(new_point[:2] - self.goal_point.reshape((2,1)))
-                print("DIST TO GOAL, ", dist_to_goal)
-                if dist_to_goal < self.stopping_dist:
-                    print('At goal!')
-                    break
+                if np.linalg.norm(new_point[:2,0] - self.goal_point.reshape((1,2))) < self.stopping_dist:
+                    self.goal_index += 1
+                    if self.goal_index == len(self.goal_set):
+                        print('Done!')
+                        break
+                    else:
+                        print('Intermediate goal acheived')
+                        self.goal_point = self.goal_set[self.goal_index].reshape((2,1))
 
         return self.nodes
     
-<<<<<<< Updated upstream
-=======
-
-    def fake_planner(self):
-        data = mpimg.imread("../maps/myhal.png")
-        plt.imshow(data)
-        print(data.shape)
-        x = []
-        y = []
-        fp_x = []
-        fp_y = []
-        print("Bounding box is: ", self.bounds)
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,-0.2])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,2.25])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,2.25])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,-0.2])))
-        for i in range(0,20,1):
-            new_point = self.sample_map_space()
-
-            closest_node_id = self.closest_node(new_point)
-
-            #Simulate driving the robot towards the closest point
-            # print(self.nodes)
-            closest_point = self.nodes[closest_node_id].point
-            # print(closest_point)
-            # print("new_point", new_point)
-            trajectory_o = self.simulate_trajectory(closest_point, new_point)
-            # print(trajectory_o)
-            # print(trajectory_o.shape)
-
-            if trajectory_o != []:
-                # # Add node to list
-                # path_cost = self.cost_to_come(trajectory_o)
-                # new_node = Node(trajectory_o[:,-1].reshape((3,1)), closest_node_id, path_cost)
-                # self.nodes.append(new_node)
-                
-                for i in range(0,int(len(trajectory_o[0])/5)):
-                    # print("trajectory_o[0:2,i]")
-                    # print(trajectory_o[0:2,i])
-                    traj_pix = self.point_to_cell(trajectory_o[0:2,i*5])
-                    # print(traj_pix)
-                    plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
-
-            
-
-            # Put in pixel coords for plotting
-            pix = self.point_to_cell(new_point)
-            footprint = self.points_to_robot_circle(new_point)
-            plt.scatter(footprint[0], footprint[1], color='r')
-            plt.scatter(pix[0], pix[1], marker='o')
-        
-        plt.scatter(self.point_to_cell(np.array([7.75,2.25]))[0], self.point_to_cell(np.array([7.75,2.25]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([-0.2,2.25]))[0], self.point_to_cell(np.array([-0.2,2.25]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([-0.2,-0.2]))[0], self.point_to_cell(np.array([-0.2,-0.2]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([7.75,-0.2]))[0], self.point_to_cell(np.array([7.75,-0.2]))[1], marker='x')
-        plt.show()
-        return 0
-
->>>>>>> Stashed changes
     def rrt_star_planning(self):
         #This function performs RRT* for the given map and robot  
+        #num_iters = 10000
+        #data = mpimg.imread("../maps/myhal.png")
+        print("bounds are: ", self.bounds)
         num_iters = 10000
         data = mpimg.imread("../maps/willowgarageworld_05res.png")
+        plt.imshow(data)
         i = 0
+        tree = np.zeros((2,1))
         # pixels_per_m = s
         while i < num_iters:
-        # for i in range(num_iters):
             # Sample
-            #print(i)
+            num_samples = 0
             trajectory_o = []
 
-            num_samples = 0
-
             while len(trajectory_o) == 0:
-
-                new_point = self.sample_map_space()
-                
-                num_samples += 1
-                # footprint = self.points_to_robot_circle(new_point)
-                # plt.scatter(footprint[0], footprint[1], color='r')
-                # plt.scatter(pix[0], pix[1], marker='o')
+                new_point = self.sample_map_space(num_samples)
+                num_samples = num_samples + (0.5*num_samples)
 
                 # Closest Node
                 current_parent_id = self.closest_node(new_point) 
@@ -557,29 +476,33 @@ class PathPlanner:
                 # Simulate trajectory
                 trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new_point[:2])
             
-            # Assuming that we are getting the final part of the path to add to the graph
-            
+            # Assuming that we are getting the final part of the path to add to the graph           
             if len(trajectory_o) != 0:
                 i+=1
-                print('Added node', new_point)
-
+                
                 new_point = trajectory_o[:,-1].reshape((3,1))
+                #print('Added node', new_point)
                 pix = self.point_to_cell(new_point)
                 footprint = self.points_to_robot_circle(new_point)
-                plt.scatter(footprint[0], footprint[1], color='r')
-                plt.scatter(pix[0], pix[1], marker='o')
-
 
                 # Add node from trajectory_ o to graph
                 path_cost = self.cost_to_come(trajectory_o) + self.nodes[current_parent_id].cost
                 new_node = Node(new_point, current_parent_id, path_cost)
                 self.nodes.append(new_node)
-                
+                # Plotting point
+                plt.scatter(footprint[0], footprint[1], color='r')
+                plt.scatter(pix[0], pix[1], marker='o')
+                tree = np.hstack((tree, pix))
+                tree = np.hstack((tree, footprint))
+                if i%100 == 0:
+                   plt.scatter(tree[0,:], tree[1,:])
+                   plt.imshow(data)
+                   plt.show()
 
                 # Add this node Id to parent node's children
                 new_id = len(self.nodes)-1
                 self.nodes[current_parent_id].children_ids.append(new_id)
-                print('Initial parent {} for node {}'.format(current_parent_id,new_id))
+                # print('Initial parent {} for node {}'.format(current_parent_id,new_id))
         
                 # Find shortest CollisionFree path to all near nodes
                 # By iterating through all it should rewire all nodes within ball of radius
@@ -599,7 +522,7 @@ class PathPlanner:
                             new_cost = self.nodes[id].cost + test_path_cost
                             old_cost = self.nodes[new_id].cost
                             if new_cost < old_cost:
-                                print('Node {} current parent {} new parent {}'.format(new_id,current_parent_id,id))
+                                # print('Node {} current parent {} new parent {}'.format(new_id,current_parent_id,id))
                                 # Update new path cost
                                 self.nodes[new_id].cost = new_cost
 
@@ -638,10 +561,13 @@ class PathPlanner:
                             old_cost = self.nodes[id].cost
 
                             if new_cost < old_cost:
-                                print('Adding new child {} to node {}'.format(id,new_id))
+
                                 old_parent_id = self.nodes[id].parent_id
                                 # Update new path cost
                                 self.nodes[id].cost = new_cost
+
+                                #Update real position of point
+                                self.nodes[id].point = trajectory_test_end_pt.reshape((3,1))
 
                                 # Rewire node by deleting old node in graph
                                 self.nodes[id].parent_id = new_id
@@ -654,15 +580,20 @@ class PathPlanner:
 
                                 # Update children
                                 self.update_children(id)
-                #closest_id = self.nodes[self.closest_node(self.goal_point.reshape((2,1)))].point[:2,0]
-                print(new_point[:2])
-                print(np.linalg.norm(new_point[:2,-1] - self.goal_point.reshape(2,1)))
+
+                #print(new_point[:2])
+                print('Dist to goal:')
+                print(np.linalg.norm(new_point[:2,0] - self.goal_point.reshape(1,2)))
             #Check for early end
-                if np.linalg.norm(new_point[:2] - self.goal_point.reshape((1,2))) < self.stopping_dist:
-                    print('At goal!')
-                    break
-        plt.imshow(data)
-        plt.show()
+                if np.linalg.norm(new_point[:2,0] - self.goal_point.reshape((1,2))) < self.stopping_dist:
+                    self.goal_index += 1
+                    if self.goal_index == len(self.goal_set):
+                        print('Done!')
+                        break
+                    else:
+                        print('Intermediate goal acheived')
+                        self.goal_point = self.goal_set[self.goal_index].reshape((2,1))
+
         return self.nodes
     
     def recover_path(self, node_id = -1):
@@ -679,28 +610,30 @@ def main():
     map_filename = "willowgarageworld_05res.png"
     map_setings_filename = "willowgarageworld_05res.yaml"
 
-    random.seed(26)
-
     #robot information
-    goal_point = np.array([42, 26]) #m
+    # 15.5,8 -- 20,14 -- 30,20 --35,23 -- 42,26
+    goal_set = np.array([[10.5,-19],[10,2],[15,3],[15.5,8],[20,14],[30,20],[35,23],[42,25]])
+    goal_point = np.array([41, 25]) #m
     # goal_point = np.array([0, 0]) #m
 
-    stopping_dist = 2 #m
+    stopping_dist = 0.5 #m
 
     data = mpimg.imread('../maps/willowgarageworld_05res.png')        
     plt.imshow(data)
 
     #RRT precursor
-    path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    goal_point_coords = path_planner.point_to_cell(goal_point)
-    print("goal_point_coords: ", goal_point_coords)
-    plt.scatter(goal_point_coords[0], goal_point_coords[1], marker='x', color='g')
-    plt.show()
+    path_planner = PathPlanner(map_filename, map_setings_filename, goal_set, stopping_dist)
+    # goal_point_coords = path_planner.point_to_cell(goal_point)
+    # print("goal_point_coords: ", goal_point_coords)
+    # plt.scatter(goal_point_coords[0], goal_point_coords[1], marker='x', color='g')
+    # plt.show()
+    # return
 
-    # nodes = path_planner.rrt_star_planning()
-    nodes = path_planner.rrt_planning()
+    nodes = path_planner.rrt_star_planning()
+    # nodes = path_planner.rrt_planning()
     node_path_metric = np.hstack(path_planner.recover_path())
     print(node_path_metric)
+    np.save("shortest_path.npy", node_path_metric)
 
     
     if len(node_path_metric) != 0:
@@ -715,17 +648,17 @@ def main():
     data = mpimg.imread('../maps/willowgarageworld_05res.png')        
     plt.imshow(data)
     plt.show()
-        # #Plot paths
-        # for i in range(1,len(node_path_metric),1):
-        #     start = node_path_metric(i-1).reshape((3,1))
-        #     end = node_path_metric(i).reshape((3,1))
-        #     traj = path_planner.connect_node_to_point(start,end[:2])
+    #     # #Plot paths
+    #     # for i in range(1,len(node_path_metric),1):
+    #     #     start = node_path_metric(i-1).reshape((3,1))
+    #     #     end = node_path_metric(i).reshape((3,1))
+    #     #     traj = path_planner.connect_node_to_point(start,end[:2])
 
-        #     for j in range(0,int(len(traj[0])),5):
-        #         traj_pix = path_planner.point_to_cell(traj[0:2,j])
-        #         plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
+    #     #     for j in range(0,int(len(traj[0])),5):
+    #     #         traj_pix = path_planner.point_to_cell(traj[0:2,j])
+    #     #         plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
 
-    # #Leftover test functions
+    # # #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
 
     # node_i = np.array([[0, 0, 2.5]]).T

@@ -9,7 +9,6 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 from skimage.draw import disk
 from scipy.linalg import block_diag
-import random
 
 #Map Handling Functions
 def load_map(filename):
@@ -49,23 +48,20 @@ class PathPlanner:
         self.bounds[1, 1] = self.map_settings_dict["origin"][1] + self.map_shape[0] * self.map_settings_dict["resolution"]
         print(self.bounds)
         #Robot information
-        self.robot_radius = 0.25 #m
-        self.vel_max = 0.8 #m/s (Feel free to change!)
-        self.rot_vel_max = 1.82 #rad/s (Feel free to change!)
+        self.robot_radius = 0.22 #m
+        self.vel_max = 0.1 #m/s (Feel free to change!)
+        self.rot_vel_max = 0.25 #rad/s (Feel free to change!)
 
         #Goal Parameters
-        self.goal_point = goal_point.reshape((2,1)) #m
+        self.goal_point = goal_point #m
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 0.5 #s
+        self.timestep = 1.0 #s
         self.num_substeps = 10
 
         #Planning storage
-        start_pt = np.array([[0],[-19],[0]])
-        # start_pt = np.array([[40.5],[25],[0]])
-        print(start_pt.shape)
-        self.nodes = [Node(start_pt, -1, 0)]
+        self.nodes = [Node(np.zeros((3,1)), -1, 0)]
 
         #RRT* Specific Parameters
         self.lebesgue_free = np.sum(self.occupancy_map) * self.map_settings_dict["resolution"] **2
@@ -75,77 +71,40 @@ class PathPlanner:
         self.epsilon = 2.5
         
         #Pygame window for visualization
-        # self.window = pygame_utils.PygameWindow(
-        #     "Path Planner", (1000, 1000), self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
+        self.window = pygame_utils.PygameWindow(
+            "Path Planner", (1000, 1000), self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
         return
 
     def check_if_duplicate(self, point):
         
         # Assuming that a node's ID is its index in the node list
         for node in self.nodes:
-
-            if np.linalg.norm(point[:2] - node.point[:2]) < 0.5:
-            #if point[0] == node.point[0] and point[1] == node.point[1] :
+            if point[0] == node.point[0] and point[1] == node.point[1] :
                 return True
 
         return False
 
     #Functions required for RRT
-    def sample_map_space(self, num_samples):
+    def sample_map_space(self):
         # Return an [x,y] coordinate to drive the robot towards
         # HINT: You may choose a subset of the map space to sample in
-        bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
-        closest_id = self.closest_node(self.goal_point)
-        closest_point = self.nodes[closest_id].point
-        exp = 0
-
-        if num_samples % 5 == 0 and num_samples != 0:
-            closest_point = np.array([[40.5],[25],[0]])
-
-        # if len(self.nodes) != 1:
-        if num_samples > 20:
-            exp = num_samples*0.05
-        #     closest_id = random.randint(round(len(self.nodes)/2), len(self.nodes)-1)
-        #     closest_point = self.nodes[closest_id].point
-
-        x_rng = 2 + (exp*0.25)
-        y_rng = 2.5 + exp
-        xmin = max(closest_point[0] - x_rng,bounding_x[0]) 
-        xmax = min(closest_point[0] + x_rng,bounding_x[1]) 
-        ymin = max(closest_point[1] - y_rng,bounding_y[0]) 
-        ymax = min(closest_point[1] + y_rng,bounding_y[1]) 
-    
-        ret_point = np.empty((2,1))
-        # print("Closest point is: ", closest_point)
-
+        threshold = 5
+        # Continue to take sample points until we find one that isn't duplicate
         while True:
+
+            # Get bounding range for map
+            bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
+            # Generate random values for x and y
             point = np.random.rand(2, 1)
-            ret_point[0, 0] = (xmax-xmin - 2*self.robot_radius)*point[0, 0] + xmin + self.robot_radius
-            ret_point[1, 0] = (ymax-ymin - 2*self.robot_radius)*point[1, 0] + ymin + self.robot_radius
+            point[1, 0] = (bounding_x[1]-bounding_x[0])*point[1, 0] + bounding_x[0]
+            point[0, 0] = (bounding_y[1]-bounding_y[0])*point[0, 0] + bounding_y[0]
 
-            if not self.check_if_duplicate(ret_point):
-                break
-    # else:
+            if np.linalg.norm(self.closest_node(point)-point) <  threshold:
+                if not self.check_if_duplicate(point):
+                    break
 
-        #     #lower_threshold = 1
-        #     upper_threshold = 5
-        #     # Continue to take sample points until we find one that isn't duplicate
-        #     ret_point = np.empty((2,1))
-
-        #     while True:
-                
-        #         # Get bounding range for map
-        #         bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
-        #         # Generate random values for x and y
-        #         point = np.random.rand(2, 1)
-        #         ret_point[0, 0] = (bounding_x[1]-bounding_x[0] - 2*self.robot_radius)*point[0, 0] + bounding_x[0] + self.robot_radius
-        #         ret_point[1, 0] = (bounding_y[1]-bounding_y[0] - 2*self.robot_radius)*point[1, 0] + bounding_y[0] + self.robot_radius
-
-        #         if (np.linalg.norm(self.closest_node(ret_point)-ret_point) <  upper_threshold):
-        #             if not self.check_if_duplicate(ret_point):
-        #                 break
-        
-        return ret_point
+        return point
+    
     
     def closest_node(self, point):
 
@@ -156,8 +115,7 @@ class PathPlanner:
         for i, node in enumerate(self.nodes):
 
             # Get distant from current point to node point
-            # dist = np.linalg.norm(point[:2]-node.point[:2])
-            dist = np.sqrt((point[0, 0] - node.point[0, 0])**2 + (point[1, 0] - node.point[1, 0])**2)
+            dist = np.sqrt((point[0, 0] - node.point[0])**2 + (point[1, 0] - node.point[1])**2)
 
             # Update if necessary
             if dist < closest_dist:
@@ -189,7 +147,7 @@ class PathPlanner:
         tog = 0
         cnt = 0
         
-        while (tog == 0) and (cnt < 1000) :
+        while (tog == 0) and (cnt < 100) :
 
             # Get new trajectory in robot frame
             new_vel, new_rot_vel = self.robot_controller(robot_traj[:, -1], point_s)
@@ -204,11 +162,10 @@ class PathPlanner:
             robot_traj = np.hstack((robot_traj, new_pts_wf))
 
             # Collision check new_pt
-            rr,cc = self.points_to_robot_circle(new_pts_wf)
-            col = self.check_collision(cc,rr)
-
-            if (col == 1):
-                return []
+            # circle_pixels = self.points_to_robot_circle(new_pts)
+            # col = self.check_collision(circle_pixels)
+            # if (col == 1):
+            #     return []
             # for pix in circle_pixels:
             #     if self.occupancy_map[pix[0], pix[1]] < 10:
             #         return []
@@ -216,18 +173,16 @@ class PathPlanner:
             # If not occupied add new pts to path
 
             # Check if new point is close enough to point_s
-            if np.linalg.norm(robot_traj[:2,-1]-point_s[:2].reshape((1,2))) < threshold:
+            if np.linalg.norm(robot_traj[:2,-1]-point_s) < threshold:
             # if np.linalg.norm(robot_traj[1:2, robot_traj.shape[1]-1]) < threshold:
                 tog = 1
             cnt += 1
-        #print(cnt)
+        print(cnt)
         return robot_traj
     
     def robot_controller(self, node_i, point_s):
         # This controller determines the velocities that will nominally move the robot from node i to node s
         # Max velocities should be enforced
-        # If heading error get it in right direction
-        # The move laterally
         p_lin = 0.1
         p_ang = 0.1
 
@@ -246,20 +201,13 @@ class PathPlanner:
         if dtheta > np.pi:
             dtheta -= 2*np.pi
 
-        if dtheta > 0.1:
-            ang_vel = p_ang * dtheta
-            if ang_vel > self.rot_vel_max:
-                ang_vel = self.rot_vel_max
-            lin_vel = 0
+        lin_vel = p_lin * np.sqrt(dx**2 + dy**2)
+        if lin_vel > self.vel_max:
+            lin_vel = self.vel_max
 
-        else:
-            lin_vel = p_lin * np.sqrt(dx**2 + dy**2)
-            if lin_vel > self.vel_max:
-                lin_vel = self.vel_max
-
-            ang_vel = p_ang * dtheta
-            if ang_vel > self.rot_vel_max:
-                ang_vel = self.rot_vel_max
+        ang_vel = p_ang * dtheta
+        if ang_vel > self.rot_vel_max:
+            ang_vel = self.rot_vel_max
 
         return lin_vel,ang_vel
     
@@ -305,44 +253,22 @@ class PathPlanner:
         
         # convert from map reference frame {I} to bottom-left ref frame {B}
         # position vector: r_B = r_I + r_BI = r_I - r_IB (offset vector from yaml file)
-
         x_B = point[0] - self.map_settings_dict["origin"][0] 
         y_B = point[1] - self.map_settings_dict["origin"][1]
 
         # need to convert to index by dividing by resolution (*1/0.05 = *20)
         height = self.map_shape[1]*self.map_settings_dict["resolution"]          # map height in meters
         x_idx = (x_B/self.map_settings_dict["resolution"]).astype(int)
-        
-        # print("self.map_shape[1]: ", self.map_shape[1])
-        # print("Height: ", height)
-
-        y_idx = ((y_B)/self.map_settings_dict["resolution"]).astype(int)  # y_B is wrt bottom left, while y_idx is wrt top left
+        y_idx = ((height-y_B)/self.map_settings_dict["resolution"]).astype(int)  # y_B is wrt bottom left, while y_idx is wrt top left
         map_indices = np.vstack((x_idx,y_idx))
 
-        
-        return map_indices
-    
-    def point_to_cell_multi(self, point):
-
-        x_B = point[0,:] - self.map_settings_dict["origin"][0] 
-        y_B = point[1,:] - self.map_settings_dict["origin"][1]
-
-        # need to convert to index by dividing by resolution (*1/0.05 = *20)
-        height = self.map_shape[1]*self.map_settings_dict["resolution"]          # map height in meters
-        x_idx = (x_B/self.map_settings_dict["resolution"]).astype(int)
-        
-        # print("self.map_shape[1]: ", self.map_shape[1])
-        # print("Height: ", height)
-
-        y_idx = ((y_B)/self.map_settings_dict["resolution"]).astype(int)  # y_B is wrt bottom left, while y_idx is wrt top left
-        map_indices = np.vstack((x_idx,y_idx))
-        
         return map_indices
 
     def points_to_robot_circle(self, points):
         # Convert a series of [x,y] points to robot map footprints for collision detection
         # Hint: The disk function is included to help you with this function
         points_idx = self.point_to_cell(points)         # convert to occupancy grid indexes (pixels)
+        
         pixel_radius = self.robot_radius*20         # robot radius in pixels
         footprint = [[],[]]
 
@@ -355,16 +281,15 @@ class PathPlanner:
     #RRT* specific functions
 
     def check_collision(self, rr, cc):
-        if min(rr) < 1 or max(rr) >= self.occupancy_map.shape[0]:
+        print("Collision Check")
+        print(rr.shape)
+        print(cc.shape)
+        print(rr.type)
+        print(cc.astype(int))
+        if 0 in self.occupancy_map[rr.astype(int), cc.astype(int)]:
             return True
-        if min(cc) < 1 or max(cc) >= self.occupancy_map.shape[1]:
-            return True
-        # black = [0,0,0,1]
-        black = 0
-        if black in self.occupancy_map[rr.astype(int), cc.astype(int)].tolist():
-            return True
+
         return False
-    
 
     def ball_radius(self):
         #Close neighbor distance
@@ -396,81 +321,25 @@ class PathPlanner:
 
     #Planner Functions
     def rrt_planning(self):
-         #This function performs RRT for the given map and robot  
-        print("bounds are: ", self.bounds)
-        num_iters = 10000
-        data = mpimg.imread("../maps/willowgarageworld_05res.png")
-        plt.imshow(data)
-        i = 0
-        tree = np.zeros((2,1))
-        # pixels_per_m = s
-        while i < num_iters:
-        # for i in range(num_iters):
-            # Sample
-            print(i)
+        #This function performs RRT on the given map and robot
+        #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
+        for i in range(1): #Most likely need more iterations than this to complete the map!
+            #Sample map space
+            point = self.sample_map_space()
 
-            trajectory_o = []
+            #Get the closest point
+            closest_node_id = self.closest_node(point)
 
-            num_samples = 0
+            #Simulate driving the robot towards the closest point
+            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
 
-            while len(trajectory_o) == 0:
-
-                new__sampled_point = self.sample_map_space(num_samples)
-
-                # print("Sampled point at", new__sampled_point)
-
-                num_samples += 1
-
-                # Closest Node
-                current_parent_id = self.closest_node(new__sampled_point) 
-                # print(self.nodes[current_parent_id].point)
-
-                # Simulate trajectory
-                trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new__sampled_point[:2])
-
-                # print(trajectory_o)
+            #Check for collisions
+            print("TO DO: Check for collisions and add safe points to list of nodes.")
             
-            # Assuming that we are getting the final part of the path to add to the graph
-            
-            if len(trajectory_o) != 0:
-                i+=1
-                print('Added node', new__sampled_point[0,0], " , ", new__sampled_point[1,0])
-
-                new_point = trajectory_o[:,-1].reshape((3,1))
-                pix = self.point_to_cell(new_point)
-                footprint = self.points_to_robot_circle(new_point)
-                # Plotting point
-                plt.scatter(footprint[0], footprint[1], color='r')
-                plt.scatter(pix[0], pix[1], marker='o')
-                tree = np.hstack((tree, pix))
-                tree = np.hstack((tree, footprint))
-                if i%70 == 0:
-                    plt.scatter(tree[0,:], tree[1,:])
-                    plt.imshow(data)
-                    plt.show()
-
-                # Add node from trajectory_ o to graph
-                path_cost = self.cost_to_come(trajectory_o) + self.nodes[current_parent_id].cost
-                new_node = Node(new_point, current_parent_id, path_cost)
-                self.nodes.append(new_node)
-                
-                # Add this node Id to parent node's children
-                new_id = len(self.nodes)-1
-                self.nodes[current_parent_id].children_ids.append(new_id)
-                # print('Initial parent {} for node {}'.format(current_parent_id,new_id))
-
-                # Check if at goal
-                # print("new point shape is: ",new_point[:2].shape)
-                dist_to_goal = np.linalg.norm(new_point[:2] - self.goal_point.reshape((2,1)))
-                print("DIST TO GOAL, ", dist_to_goal)
-                if dist_to_goal < self.stopping_dist:
-                    print('At goal!')
-                    break
-
+            #Check if goal has been reached
+            print("TO DO: Check if at goal point.")
         return self.nodes
     
-<<<<<<< Updated upstream
-=======
 
     def fake_planner(self):
         data = mpimg.imread("../maps/myhal.png")
@@ -478,112 +347,69 @@ class PathPlanner:
         print(data.shape)
         x = []
         y = []
-        fp_x = []
-        fp_y = []
-        print("Bounding box is: ", self.bounds)
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,-0.2])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,2.25])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,2.25])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,-0.2])))
-        for i in range(0,20,1):
+        for i in range(0,50,1):
             new_point = self.sample_map_space()
-
-            closest_node_id = self.closest_node(new_point)
-
-            #Simulate driving the robot towards the closest point
-            # print(self.nodes)
-            closest_point = self.nodes[closest_node_id].point
-            # print(closest_point)
-            # print("new_point", new_point)
-            trajectory_o = self.simulate_trajectory(closest_point, new_point)
-            # print(trajectory_o)
-            # print(trajectory_o.shape)
-
-            if trajectory_o != []:
-                # # Add node to list
-                # path_cost = self.cost_to_come(trajectory_o)
-                # new_node = Node(trajectory_o[:,-1].reshape((3,1)), closest_node_id, path_cost)
-                # self.nodes.append(new_node)
-                
-                for i in range(0,int(len(trajectory_o[0])/5)):
-                    # print("trajectory_o[0:2,i]")
-                    # print(trajectory_o[0:2,i])
-                    traj_pix = self.point_to_cell(trajectory_o[0:2,i*5])
-                    # print(traj_pix)
-                    plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
-
-            
-
-            # Put in pixel coords for plotting
             pix = self.point_to_cell(new_point)
-            footprint = self.points_to_robot_circle(new_point)
-            plt.scatter(footprint[0], footprint[1], color='r')
-            plt.scatter(pix[0], pix[1], marker='o')
-        
-        plt.scatter(self.point_to_cell(np.array([7.75,2.25]))[0], self.point_to_cell(np.array([7.75,2.25]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([-0.2,2.25]))[0], self.point_to_cell(np.array([-0.2,2.25]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([-0.2,-0.2]))[0], self.point_to_cell(np.array([-0.2,-0.2]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([7.75,-0.2]))[0], self.point_to_cell(np.array([7.75,-0.2]))[1], marker='x')
+            print( "Point is: ", new_point)
+            x.append(pix[0,0])
+            y.append(pix[1,0])
+        plt.scatter(y,x, marker='o')
+        plt.imshow(data)
         plt.show()
         return 0
 
->>>>>>> Stashed changes
     def rrt_star_planning(self):
         #This function performs RRT* for the given map and robot  
         num_iters = 10000
-        data = mpimg.imread("../maps/willowgarageworld_05res.png")
-        i = 0
-        # pixels_per_m = s
-        while i < num_iters:
-        # for i in range(num_iters):
+
+        for i in range(num_iters):
             # Sample
-            #print(i)
-            trajectory_o = []
+            print(i)
+            new_point = self.sample_map_space()
+            print('New point')
+            print(new_point)
 
-            num_samples = 0
+            if i%10 == 0:
+                data = mpimg.imread("../maps/myhal.png")
+                print(len(self.nodes))
+                for id, node in enumerate(self.nodes):
+                    point = self.point_to_cell(node.point)
+                    plt.plot(point[0,0], point[1,0], 'o', color="green")
+                plt.imshow(data)
+                plt.show()
 
-            while len(trajectory_o) == 0:
+            # Closest Node
+            closest_node_id = self.closest_node(new_point) 
+            # print('Closest ID')
+            # print(self.nodes[closest_node_id].point)
 
-                new_point = self.sample_map_space()
-                
-                num_samples += 1
-                # footprint = self.points_to_robot_circle(new_point)
-                # plt.scatter(footprint[0], footprint[1], color='r')
-                # plt.scatter(pix[0], pix[1], marker='o')
+            # Simulate trajectory
+            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, new_point[:2])
+            # print('Trajectory')
+            # print(trajectory_o)
 
-                # Closest Node
-                current_parent_id = self.closest_node(new_point) 
-
-                # Simulate trajectory
-                trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new_point[:2])
+            # Check for Collision
+            rr, cc = self.points_to_robot_circle(trajectory_o)
             
             # Assuming that we are getting the final part of the path to add to the graph
-            
-            if len(trajectory_o) != 0:
-                i+=1
-                print('Added node', new_point)
+            new_point = trajectory_o[:,-1].reshape((3,1))
 
-                new_point = trajectory_o[:,-1].reshape((3,1))
-                pix = self.point_to_cell(new_point)
-                footprint = self.points_to_robot_circle(new_point)
-                plt.scatter(footprint[0], footprint[1], color='r')
-                plt.scatter(pix[0], pix[1], marker='o')
-
-
+            if not(self.check_collision(rr, cc)):
                 # Add node from trajectory_ o to graph
-                path_cost = self.cost_to_come(trajectory_o) + self.nodes[current_parent_id].cost
-                new_node = Node(new_point, current_parent_id, path_cost)
+                path_cost = self.cost_to_come(trajectory_o)
+                new_node = Node(new_point, closest_node_id, path_cost)
                 self.nodes.append(new_node)
-                
 
                 # Add this node Id to parent node's children
                 new_id = len(self.nodes)-1
-                self.nodes[current_parent_id].children_ids.append(new_id)
-                print('Initial parent {} for node {}'.format(current_parent_id,new_id))
+                self.nodes[closest_node_id].children_ids.append(new_id)
         
                 # Find shortest CollisionFree path to all near nodes
                 # By iterating through all it should rewire all nodes within ball of radius
+
+                current_parent_id = closest_node_id
                 for id, node in enumerate(self.nodes):
+                    #print(self.nodes[new_id].point)
                     if id == new_id or id == current_parent_id:
                         continue
                     # Check if the node is in the ball radius
@@ -591,17 +417,17 @@ class PathPlanner:
 
                         # Get a path between this node and the trajectory_end_pt
                         trajectory_test = self.simulate_trajectory(node.point,self.nodes[new_id].point[:2])
+                        rr_test, cc_test = self.points_to_robot_circle(trajectory_test)
+                        if not(self.check_collision(rr_test, cc_test)):
 
-                        if len(trajectory_test) != 0:
                             # If cost is also lower than original then rewire
+                            # print(trajectory_test)
                             trajectory_test_end_pt = trajectory_test[:,-1]
                             test_path_cost = self.cost_to_come(trajectory_test)
-                            new_cost = self.nodes[id].cost + test_path_cost
-                            old_cost = self.nodes[new_id].cost
-                            if new_cost < old_cost:
-                                print('Node {} current parent {} new parent {}'.format(new_id,current_parent_id,id))
+                            if test_path_cost < path_cost:
+                                # print('update')
                                 # Update new path cost
-                                self.nodes[new_id].cost = new_cost
+                                path_cost = test_path_cost
 
                                 self.nodes[new_id].point = trajectory_test_end_pt.reshape((3,1))
 
@@ -619,6 +445,7 @@ class PathPlanner:
                                 
                 # Update all nodes in ball radius
                 for id, node in enumerate(self.nodes):
+                    #print(self.nodes[new_id].point)
                     if id == new_id or id == current_parent_id:
                         continue
                     # Check if the node is in the ball radius
@@ -626,10 +453,12 @@ class PathPlanner:
                     if np.linalg.norm(node.point[:2]-new_point[:2]) < self.ball_radius():
 
                         # Get a path between this node and the trajectory_end_pt
+                        #print('third call')
                         trajectory_test = self.simulate_trajectory(self.nodes[new_id].point,node.point)
+                        rr_test, cc_test = self.points_to_robot_circle(trajectory_test)
 
                         # Check if the rewired path is collision free
-                        if len(trajectory_test) != 0:
+                        if not(self.check_collision(rr_test, cc_test)):
 
                             # If cost is also lower than original then rewire
                             trajectory_test_end_pt = trajectory_test[:,-1]
@@ -638,8 +467,7 @@ class PathPlanner:
                             old_cost = self.nodes[id].cost
 
                             if new_cost < old_cost:
-                                print('Adding new child {} to node {}'.format(id,new_id))
-                                old_parent_id = self.nodes[id].parent_id
+                                current_parent_id = self.nodes[id].parent_id
                                 # Update new path cost
                                 self.nodes[id].cost = new_cost
 
@@ -650,19 +478,17 @@ class PathPlanner:
                                 self.nodes[new_id].children_ids.append(id)
 
                                 # Remove the node from old old parents id
-                                self.nodes[old_parent_id].children_ids.remove(id)
+                                self.nodes[current_parent_id].children_ids.remove(id)
 
                                 # Update children
                                 self.update_children(id)
-                #closest_id = self.nodes[self.closest_node(self.goal_point.reshape((2,1)))].point[:2,0]
-                print(new_point[:2])
-                print(np.linalg.norm(new_point[:2,-1] - self.goal_point.reshape(2,1)))
+
+
             #Check for early end
-                if np.linalg.norm(new_point[:2] - self.goal_point.reshape((1,2))) < self.stopping_dist:
-                    print('At goal!')
-                    break
-        plt.imshow(data)
-        plt.show()
+            if np.linalg.norm(new_point[:2] - self.goal_point) < self.stopping_dist:
+                print('At goal!')
+                break
+
         return self.nodes
     
     def recover_path(self, node_id = -1):
@@ -676,57 +502,21 @@ class PathPlanner:
 
 def main():
     #Set map information
-    map_filename = "willowgarageworld_05res.png"
-    map_setings_filename = "willowgarageworld_05res.yaml"
-
-    random.seed(26)
+    map_filename = "myhal.png"
+    map_setings_filename = "myhal.yaml"
 
     #robot information
-    goal_point = np.array([42, 26]) #m
-    # goal_point = np.array([0, 0]) #m
-
-    stopping_dist = 2 #m
-
-    data = mpimg.imread('../maps/willowgarageworld_05res.png')        
-    plt.imshow(data)
+    goal_point = np.array([[0], [0]]) #m
+    stopping_dist = 0.5 #m
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    goal_point_coords = path_planner.point_to_cell(goal_point)
-    print("goal_point_coords: ", goal_point_coords)
-    plt.scatter(goal_point_coords[0], goal_point_coords[1], marker='x', color='g')
-    plt.show()
-
     # nodes = path_planner.rrt_star_planning()
-    nodes = path_planner.rrt_planning()
-    node_path_metric = np.hstack(path_planner.recover_path())
-    print(node_path_metric)
-
-    
-    if len(node_path_metric) != 0:
-        # Plot point
-        for i in range(0,len(node_path_metric[0]),1):
-            pt = node_path_metric[:,i].reshape((3,1))
-
-            pix = path_planner.point_to_cell(pt)
-            footprint = path_planner.points_to_robot_circle(pt)
-            plt.scatter(footprint[0], footprint[1], color='r')
-            plt.scatter(pix[0], pix[1], marker='o')
-    data = mpimg.imread('../maps/willowgarageworld_05res.png')        
-    plt.imshow(data)
-    plt.show()
-        # #Plot paths
-        # for i in range(1,len(node_path_metric),1):
-        #     start = node_path_metric(i-1).reshape((3,1))
-        #     end = node_path_metric(i).reshape((3,1))
-        #     traj = path_planner.connect_node_to_point(start,end[:2])
-
-        #     for j in range(0,int(len(traj[0])),5):
-        #         traj_pix = path_planner.point_to_cell(traj[0:2,j])
-        #         plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
+    nodes = path_planner.fake_planner()
+    # node_path_metric = np.hstack(path_planner.recover_path())
 
     # #Leftover test functions
-    np.save("shortest_path.npy", node_path_metric)
+    # np.save("shortest_path.npy", node_path_metric)
 
     # node_i = np.array([[0, 0, 2.5]]).T
     # point_s = goal_point  
@@ -734,19 +524,19 @@ def main():
     # print("Final Trajectory:", final_trajectory)
     # print("shape", np.shape(final_trajectory))
 
-    # for i, val in enumerate(node_path_metric.T):
+    # for i, val in enumerate(final_trajectory.T):
     #     if i%10 != 0:
     #         continue
     #     path_planner.window.add_se2_pose(val, length=8, color=(0, 0, 255))
     
-    # #path_planner.window.add_se2_pose(node_i.flatten(), length=12, color=(255, 0, 0))
+    # path_planner.window.add_se2_pose(node_i.flatten(), length=12, color=(255, 0, 0))
 
     # # Ensures that pygame window does not close unless keyboard exit (CTRL+C)
-    # # running = True
-    # # while running:
-    # #     for event in pygame.event.get():
-    # #         if event.type == pygame.QUIT:
-    # #             running = False
+    # running = True
+    # while running:
+    #     for event in pygame.event.get():
+    #         if event.type == pygame.QUIT:
+    #             running = False
 
 
 if __name__ == '__main__':

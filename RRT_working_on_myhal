@@ -9,7 +9,6 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 from skimage.draw import disk
 from scipy.linalg import block_diag
-import random
 
 #Map Handling Functions
 def load_map(filename):
@@ -62,8 +61,7 @@ class PathPlanner:
         self.num_substeps = 10
 
         #Planning storage
-        start_pt = np.array([[0],[-19],[0]])
-        # start_pt = np.array([[40.5],[25],[0]])
+        start_pt = np.array([[0],[0],[0]])
         print(start_pt.shape)
         self.nodes = [Node(start_pt, -1, 0)]
 
@@ -91,59 +89,45 @@ class PathPlanner:
         return False
 
     #Functions required for RRT
-    def sample_map_space(self, num_samples):
+    def sample_map_space(self):
         # Return an [x,y] coordinate to drive the robot towards
         # HINT: You may choose a subset of the map space to sample in
         bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
-        closest_id = self.closest_node(self.goal_point)
-        closest_point = self.nodes[closest_id].point
-        exp = 0
+        if len(self.nodes) != 1:
+            closest_id = self.closest_node(self.goal_point)
+            closest_point = self.nodes[closest_id].point
+            xmin = max(closest_point[0] - 2,bounding_x[0]) 
+            xmax = min(closest_point[0] + 2,bounding_x[1]) 
+            ymin = max(closest_point[1] - 1,bounding_y[0]) 
+            ymax = min(closest_point[1] + 1,bounding_y[1]) 
+            ret_point = np.empty((2,1))
+            print("Closest point is: ", closest_point)
+            while True:
+                point = np.random.rand(2, 1)
+                ret_point[0, 0] = (xmax-xmin - 2*self.robot_radius)*point[0, 0] + xmin + self.robot_radius
+                ret_point[1, 0] = (ymax-ymin - 2*self.robot_radius)*point[1, 0] + ymin + self.robot_radius
 
-        if num_samples % 5 == 0 and num_samples != 0:
-            closest_point = np.array([[40.5],[25],[0]])
+                if not self.check_if_duplicate(ret_point):
+                    break
+        else:
 
-        # if len(self.nodes) != 1:
-        if num_samples > 20:
-            exp = num_samples*0.05
-        #     closest_id = random.randint(round(len(self.nodes)/2), len(self.nodes)-1)
-        #     closest_point = self.nodes[closest_id].point
+            #lower_threshold = 1
+            upper_threshold = 5
+            # Continue to take sample points until we find one that isn't duplicate
+            ret_point = np.empty((2,1))
 
-        x_rng = 2 + (exp*0.25)
-        y_rng = 2.5 + exp
-        xmin = max(closest_point[0] - x_rng,bounding_x[0]) 
-        xmax = min(closest_point[0] + x_rng,bounding_x[1]) 
-        ymin = max(closest_point[1] - y_rng,bounding_y[0]) 
-        ymax = min(closest_point[1] + y_rng,bounding_y[1]) 
-    
-        ret_point = np.empty((2,1))
-        # print("Closest point is: ", closest_point)
-
-        while True:
-            point = np.random.rand(2, 1)
-            ret_point[0, 0] = (xmax-xmin - 2*self.robot_radius)*point[0, 0] + xmin + self.robot_radius
-            ret_point[1, 0] = (ymax-ymin - 2*self.robot_radius)*point[1, 0] + ymin + self.robot_radius
-
-            if not self.check_if_duplicate(ret_point):
-                break
-    # else:
-
-        #     #lower_threshold = 1
-        #     upper_threshold = 5
-        #     # Continue to take sample points until we find one that isn't duplicate
-        #     ret_point = np.empty((2,1))
-
-        #     while True:
+            while True:
                 
-        #         # Get bounding range for map
-        #         bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
-        #         # Generate random values for x and y
-        #         point = np.random.rand(2, 1)
-        #         ret_point[0, 0] = (bounding_x[1]-bounding_x[0] - 2*self.robot_radius)*point[0, 0] + bounding_x[0] + self.robot_radius
-        #         ret_point[1, 0] = (bounding_y[1]-bounding_y[0] - 2*self.robot_radius)*point[1, 0] + bounding_y[0] + self.robot_radius
+                # Get bounding range for map
+                bounding_x, bounding_y = self.bounds[0, :], self.bounds[1, :]
+                # Generate random values for x and y
+                point = np.random.rand(2, 1)
+                ret_point[0, 0] = (bounding_x[1]-bounding_x[0] - 2*self.robot_radius)*point[0, 0] + bounding_x[0] + self.robot_radius
+                ret_point[1, 0] = (bounding_y[1]-bounding_y[0] - 2*self.robot_radius)*point[1, 0] + bounding_y[0] + self.robot_radius
 
-        #         if (np.linalg.norm(self.closest_node(ret_point)-ret_point) <  upper_threshold):
-        #             if not self.check_if_duplicate(ret_point):
-        #                 break
+                if (np.linalg.norm(self.closest_node(ret_point)-ret_point) <  upper_threshold):
+                    if not self.check_if_duplicate(ret_point):
+                        break
         
         return ret_point
     
@@ -157,7 +141,7 @@ class PathPlanner:
 
             # Get distant from current point to node point
             # dist = np.linalg.norm(point[:2]-node.point[:2])
-            dist = np.sqrt((point[0, 0] - node.point[0, 0])**2 + (point[1, 0] - node.point[1, 0])**2)
+            dist = np.sqrt((point[0, 0] - node.point[0])**2 + (point[1, 0] - node.point[1])**2)
 
             # Update if necessary
             if dist < closest_dist:
@@ -397,7 +381,6 @@ class PathPlanner:
     #Planner Functions
     def rrt_planning(self):
          #This function performs RRT for the given map and robot  
-        print("bounds are: ", self.bounds)
         num_iters = 10000
         data = mpimg.imread("../maps/willowgarageworld_05res.png")
         plt.imshow(data)
@@ -407,28 +390,14 @@ class PathPlanner:
         while i < num_iters:
         # for i in range(num_iters):
             # Sample
-            print(i)
+            new__sampled_point = self.sample_map_space()
+            print("Sampled point at", new__sampled_point)
 
-            trajectory_o = []
+            # Closest Node
+            current_parent_id = self.closest_node(new__sampled_point) 
 
-            num_samples = 0
-
-            while len(trajectory_o) == 0:
-
-                new__sampled_point = self.sample_map_space(num_samples)
-
-                # print("Sampled point at", new__sampled_point)
-
-                num_samples += 1
-
-                # Closest Node
-                current_parent_id = self.closest_node(new__sampled_point) 
-                # print(self.nodes[current_parent_id].point)
-
-                # Simulate trajectory
-                trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new__sampled_point[:2])
-
-                # print(trajectory_o)
+            # Simulate trajectory
+            trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new__sampled_point[:2])
             
             # Assuming that we are getting the final part of the path to add to the graph
             
@@ -444,7 +413,7 @@ class PathPlanner:
                 plt.scatter(pix[0], pix[1], marker='o')
                 tree = np.hstack((tree, pix))
                 tree = np.hstack((tree, footprint))
-                if i%70 == 0:
+                if i%20 == 0:
                     plt.scatter(tree[0,:], tree[1,:])
                     plt.imshow(data)
                     plt.show()
@@ -461,73 +430,12 @@ class PathPlanner:
 
                 # Check if at goal
                 # print("new point shape is: ",new_point[:2].shape)
-                dist_to_goal = np.linalg.norm(new_point[:2] - self.goal_point.reshape((2,1)))
-                print("DIST TO GOAL, ", dist_to_goal)
-                if dist_to_goal < self.stopping_dist:
+                if np.linalg.norm(new_point[:2] - self.goal_point.reshape((2,1))) < self.stopping_dist:
                     print('At goal!')
                     break
 
         return self.nodes
     
-<<<<<<< Updated upstream
-=======
-
-    def fake_planner(self):
-        data = mpimg.imread("../maps/myhal.png")
-        plt.imshow(data)
-        print(data.shape)
-        x = []
-        y = []
-        fp_x = []
-        fp_y = []
-        print("Bounding box is: ", self.bounds)
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,-0.2])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,2.25])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([-0.2,2.25])))
-        print("Bounding box in pixels: ", self.point_to_cell(np.array([7.75,-0.2])))
-        for i in range(0,20,1):
-            new_point = self.sample_map_space()
-
-            closest_node_id = self.closest_node(new_point)
-
-            #Simulate driving the robot towards the closest point
-            # print(self.nodes)
-            closest_point = self.nodes[closest_node_id].point
-            # print(closest_point)
-            # print("new_point", new_point)
-            trajectory_o = self.simulate_trajectory(closest_point, new_point)
-            # print(trajectory_o)
-            # print(trajectory_o.shape)
-
-            if trajectory_o != []:
-                # # Add node to list
-                # path_cost = self.cost_to_come(trajectory_o)
-                # new_node = Node(trajectory_o[:,-1].reshape((3,1)), closest_node_id, path_cost)
-                # self.nodes.append(new_node)
-                
-                for i in range(0,int(len(trajectory_o[0])/5)):
-                    # print("trajectory_o[0:2,i]")
-                    # print(trajectory_o[0:2,i])
-                    traj_pix = self.point_to_cell(trajectory_o[0:2,i*5])
-                    # print(traj_pix)
-                    plt.scatter(traj_pix[0], traj_pix[1], color='g', marker='1')
-
-            
-
-            # Put in pixel coords for plotting
-            pix = self.point_to_cell(new_point)
-            footprint = self.points_to_robot_circle(new_point)
-            plt.scatter(footprint[0], footprint[1], color='r')
-            plt.scatter(pix[0], pix[1], marker='o')
-        
-        plt.scatter(self.point_to_cell(np.array([7.75,2.25]))[0], self.point_to_cell(np.array([7.75,2.25]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([-0.2,2.25]))[0], self.point_to_cell(np.array([-0.2,2.25]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([-0.2,-0.2]))[0], self.point_to_cell(np.array([-0.2,-0.2]))[1], marker='x')
-        plt.scatter(self.point_to_cell(np.array([7.75,-0.2]))[0], self.point_to_cell(np.array([7.75,-0.2]))[1], marker='x')
-        plt.show()
-        return 0
-
->>>>>>> Stashed changes
     def rrt_star_planning(self):
         #This function performs RRT* for the given map and robot  
         num_iters = 10000
@@ -538,24 +446,20 @@ class PathPlanner:
         # for i in range(num_iters):
             # Sample
             #print(i)
-            trajectory_o = []
+            new_point = self.sample_map_space()
+            if i%50 == 0:
+                plt.imshow(data)
+                plt.show()
+            
+            # footprint = self.points_to_robot_circle(new_point)
+            # plt.scatter(footprint[0], footprint[1], color='r')
+            # plt.scatter(pix[0], pix[1], marker='o')
 
-            num_samples = 0
+            # Closest Node
+            current_parent_id = self.closest_node(new_point) 
 
-            while len(trajectory_o) == 0:
-
-                new_point = self.sample_map_space()
-                
-                num_samples += 1
-                # footprint = self.points_to_robot_circle(new_point)
-                # plt.scatter(footprint[0], footprint[1], color='r')
-                # plt.scatter(pix[0], pix[1], marker='o')
-
-                # Closest Node
-                current_parent_id = self.closest_node(new_point) 
-
-                # Simulate trajectory
-                trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new_point[:2])
+            # Simulate trajectory
+            trajectory_o = self.simulate_trajectory(self.nodes[current_parent_id].point, new_point[:2])
             
             # Assuming that we are getting the final part of the path to add to the graph
             
@@ -679,13 +583,9 @@ def main():
     map_filename = "willowgarageworld_05res.png"
     map_setings_filename = "willowgarageworld_05res.yaml"
 
-    random.seed(26)
-
     #robot information
     goal_point = np.array([42, 26]) #m
-    # goal_point = np.array([0, 0]) #m
-
-    stopping_dist = 2 #m
+    stopping_dist = 0.5 #m
 
     data = mpimg.imread('../maps/willowgarageworld_05res.png')        
     plt.imshow(data)
