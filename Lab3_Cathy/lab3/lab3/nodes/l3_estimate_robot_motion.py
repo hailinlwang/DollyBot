@@ -76,14 +76,37 @@ class WheelOdom:
             # update calculated pose and twist with new data
             le = sensor_state_msg.left_encoder
             re = sensor_state_msg.right_encoder
+            curr_t = sensor_state_msg.header.stamp # I added this
 
             # # YOUR CODE HERE!!!
             # Update your odom estimates with the latest encoder measurements and populate the relevant area
             # of self.pose and self.twist with estimated position, heading and velocity
 
-            # self.pose.position.x = xx
-            # self.pose.position.y = xx
-            # self.pose.orientation = xx
+            delta_phi = np.array([[(le - self.last_enc_l) * RAD_PER_TICK],
+                                  [(re - self.last_enc_r) * RAD_PER_TICK]])
+            
+            theta = euler_from_ros_quat(self.odom.pose.pose.orientation)[2]
+            rotm = np.array([[np.cos(theta), 0],
+                      [np.sin(theta), 0],
+                      [0, 1]])
+            
+            r = np.array([[WHEEL_RADIUS/2, WHEEL_RADIUS/2],
+                          [WHEEL_RADIUS/(2*BASELINE), -WHEEL_RADIUS/(2*BASELINE)]])
+            
+            mu_t = np.array([[self.odom.pose.pose.position.x],
+                            [self.odom.pose.pose.position.y],
+                            [theta]])
+            
+            mu_new = mu_t + rotm @ r @ delta_phi
+
+            self.pose.position.x = mu_new[0,0]
+            self.pose.position.y = mu_new[1,0]
+            self.pose.orientation = ros_quat_from_euler(0, 0, theta)
+
+            h = curr_t - self.last_time
+            self.twist.linear.x = (mu_new - mu_t) / h
+            self.twist.linear.y = (mu_new - mu_t) / h
+            self.twist.angular.z = (mu_new - mu_t) / h
 
             # self.twist.linear.x = mu_dot[0].item()
             # self.twist.linear.y = mu_dot[1].item()
