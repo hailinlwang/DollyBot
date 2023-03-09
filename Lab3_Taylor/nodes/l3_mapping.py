@@ -135,12 +135,9 @@ class OccupancyGripMap:
         for i in range(0,len(pix_x)):
             x,y = pix_x[i],pix_y[i]
             if i < len(pix_x) - NUM_PTS_OBSTACLE:
-                log_odds[x,y] = 0
+                log_odds[x,y] -= BETA
             else:
-                log_odds[x,y] = 1
-            
-
-            #log_odds[x,y] = 
+                log_odds[x,y] += ALPHA
 
         map = self.log_odds_to_probability(log_odds)
         return map, log_odds
